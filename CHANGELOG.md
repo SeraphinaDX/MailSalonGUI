@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.7
+
+- Add Ctrl-click, Shift-click, Shift navigation and Ctrl+A message selection,
+  with highlighted rows and a visible selection count.
+- Apply read/unread, archive and confirmed deletion to the selected group;
+  preserve group selection when right-clicking a selected message.
+- Guard bulk confirmations and queued actions against changed views/selections,
+  resolve automatic-read renames before acting, and report partial failures.
+- Keep text-field shortcuts and main-window shortcuts working from the list.
+
 ## 0.1.6
 
 - Give X11/XWayland windows an explicit desktop-file identity and a consistent

@@ -8,13 +8,13 @@ import (
 )
 
 func (a *App) selectMessage(id int) {
-	if a.changing {
+	if a.changing && !a.changingRead {
 		return
 	}
 	a.Window.Canvas().Focus(a.messageList)
-	a.messageList.Select(id)
-	if a.selected != id {
-		a.openMessage(id)
+	a.messageList.SelectWithModifiers(id, a.messageList.modifiers())
+	if a.messageList.selectedID >= 0 && a.selected != a.messageList.selectedID {
+		a.openMessage(a.messageList.selectedID)
 	}
 }
 func (a *App) hideMessageMenu() {
@@ -29,13 +29,16 @@ func (a *App) showMessageMenu(id int, position fyne.Position) {
 		return
 	}
 	a.hideMessageMenu()
-	a.selectMessage(id)
-	gen, reading := a.generation, a.reading
+	a.Window.Canvas().Focus(a.messageList)
+	if !a.messageList.selection[id] {
+		a.messageList.Select(id)
+	}
+	gen, revision := a.generation, a.messageList.revision
 	// A timer reload or changed selection can invalidate an open popup. Guard
 	// callbacks as well as hiding it, so recycled rows never target another mail.
 	action := func(fn func()) func() {
 		return func() {
-			if gen == a.generation && reading == a.reading && a.selected == id {
+			if gen == a.generation && revision == a.messageList.revision {
 				fn()
 			}
 		}
@@ -45,14 +48,10 @@ func (a *App) showMessageMenu(id int, position fyne.Position) {
 		"replyAll": fyne.NewMenuItem("Reply all", action(func() { a.reply(false, true) })),
 		"forward":  fyne.NewMenuItem("Forward", action(func() { a.reply(true, false) })),
 		"read": fyne.NewMenuItem("Mark as read", action(func() {
-			if e, ok := a.currentEntry(); ok {
-				a.changeRead(e, true)
-			}
+			a.markSelectedRead(true)
 		})),
 		"unread": fyne.NewMenuItem("Mark as unread", action(func() {
-			if e, ok := a.currentEntry(); ok {
-				a.changeRead(e, false)
-			}
+			a.markSelectedRead(false)
 		})),
 		"archive": fyne.NewMenuItem("Archive", action(a.archive)),
 		"delete":  fyne.NewMenuItem("Delete", action(a.deleteMessage)),
@@ -68,16 +67,26 @@ func (a *App) updateMessageMenu() {
 	if a.messageMenu == nil {
 		return
 	}
+	entries := a.selectedEntries()
+	single := len(entries) == 1 && a.messageList.selection[a.selected]
 	for _, key := range []string{"reply", "replyAll", "forward"} {
-		a.messageMenuItems[key].Disabled = a.parsed == nil
+		a.messageMenuItems[key].Disabled = !single || a.parsed == nil || a.changing
 	}
-	e, ok := a.currentEntry()
-	for _, key := range []string{"read", "unread", "archive", "delete", "source"} {
-		a.messageMenuItems[key].Disabled = !ok
+	for _, key := range []string{"read", "unread", "archive", "delete"} {
+		a.messageMenuItems[key].Disabled = a.changing || len(entries) == 0
 	}
-	if ok {
-		a.messageMenuItems["read"].Disabled = !e.Unread
-		a.messageMenuItems["unread"].Disabled = e.Unread
+	a.messageMenuItems["source"].Disabled = !single || a.changing
+	if !a.changing && len(entries) > 0 {
+		anyRead, anyUnread := false, false
+		for _, e := range entries {
+			if e.Unread {
+				anyUnread = true
+			} else {
+				anyRead = true
+			}
+		}
+		a.messageMenuItems["read"].Disabled = !anyUnread
+		a.messageMenuItems["unread"].Disabled = !anyRead
 	}
 	a.messageMenu.Refresh()
 }

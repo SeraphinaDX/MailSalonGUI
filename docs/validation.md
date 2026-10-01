@@ -1,5 +1,24 @@
 # Validation
 
+## 0.1.7
+
+- `go test -tags ci ./...`, `go vet -tags ci ./...`, and GUI tests with
+  `-race -tags ci` passed. The native Linux cgo/X11 build reports 0.1.7.
+- Software-driver mouse/keyboard checks covered Ctrl toggles, Shift ranges,
+  Shift navigation, Ctrl+A, Ctrl+Space, Escape, group-preserving right click,
+  visible selection counts and selection remapping through search.
+- Real temporary Maildirs verified bulk read/unread, archive, confirmed
+  move-to-Trash and permanent deletion, changed-selection confirmation guards,
+  automatic-read path renames and continued processing after a file failure.
+- A paused bulk worker confirmed that changing to the destination folder kept
+  the original operation targets and refreshed that folder after completion.
+- Explicit mark-unread survived pending preview loading. Ctrl+F/Ctrl+N still
+  reached the main-window shortcuts, and Ctrl+A in the search field selected
+  text rather than messages. Previous Delete/Backspace/numpad tests passed.
+- Software-rendered selection and group-menu screenshots were visually
+  inspected. Native modifier-key interaction still needs checking in a real
+  desktop session.
+
 ## 0.1.6
 
 - `go test -tags ci ./...` and `go vet -tags ci ./...` passed.
