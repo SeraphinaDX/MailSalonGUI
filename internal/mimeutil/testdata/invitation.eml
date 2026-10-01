@@ -1,0 +1,57 @@
+From: Organizer <organizer@example.test>
+To: Demo User <demo@example.com>
+Subject: MailSalon community meeting
+Message-ID: <meeting-request@example.test>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary=invite
+
+--invite
+Content-Type: text/plain; charset=utf-8
+
+Please join our community meeting.
+--invite
+Content-Type: text/calendar; charset=utf-8; method=REQUEST
+Content-Transfer-Encoding: quoted-printable
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Example//Calendar//EN
+METHOD:REQUEST
+BEGIN:VTIMEZONE
+TZID:America/Toronto
+BEGIN:STANDARD
+DTSTART:19701101T020000
+TZOFFSETFROM:-0400
+TZOFFSETTO:-0500
+RRULE:FREQ=3DYEARLY;BYMONTH=3D11;BYDAY=3D1SU
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:19700308T020000
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0400
+RRULE:FREQ=3DYEARLY;BYMONTH=3D3;BYDAY=3D2SU
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:community/meeting@example.test
+DTSTAMP:20261001T180000Z
+SEQUENCE:2
+DTSTART;TZID=3DAmerica/Toronto:20261002T100000
+DTEND;TZID=3DAmerica/Toronto:20261002T110000
+SUMMARY:MailSalon community meeting
+LOCATION:Community room
+DESCRIPTION:Discuss the next release.\nBring your ideas.
+ORGANIZER;CN=3D"Organizer: Team":mailto:organizer@example.test
+ATTENDEE;CN=3D"Demo: User";RSVP=3DTRUE;PARTSTAT=3DNEEDS-ACTION:mailto:demo@exampl=
+e.com
+ATTENDEE:mailto:other@example.test
+RRULE:FREQ=3DWEEKLY;COUNT=3D4
+X-EXAMPLE:preserve this
+BEGIN:VALARM
+ACTION:DISPLAY
+TRIGGER:-PT15M
+DESCRIPTION:Reminder
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+--invite--

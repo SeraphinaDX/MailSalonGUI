@@ -127,3 +127,11 @@ MAILSALONGUI_TEST_GPG=1 go test ./internal/pgp
 Fyne upstream API and threading guidance:
 [Quick start](https://docs.fyne.io/started/quick/) and
 [Using goroutines](https://docs.fyne.io/started/goroutines/).
+
+Calendar mail parsing and guarded imports live in `internal/pim/invitations.go`;
+event cards and draft creation live in `internal/gui/calendar_mail.go`. MIME
+calendar alternatives are retained as attachments even without filenames. RSVP
+drafts retain a fixed invited From address and a calendar response attachment.
+Relevant protocol references are [iTIP RFC 5546 §3.2.3](https://www.rfc-editor.org/rfc/rfc5546.html#section-3.2.3),
+[iMIP RFC 6047](https://www.rfc-editor.org/rfc/rfc6047.html), and
+[CalDAV RFC 4791 §4.1](https://www.rfc-editor.org/rfc/rfc4791.html#section-4.1).

@@ -1,7 +1,7 @@
 # MailSalonGUI
 
 A standalone desktop version of MailSalon, written in **Go and Fyne**.
-Version **0.1.8**. Its codebase, executable and configuration path are independent
+Version **0.1.9**. Its codebase, executable and configuration path are independent
 of the terminal client. It reads the same local Maildirs and contact/calendar
 files and supports MailSalon's TOML account settings.
 
@@ -133,6 +133,8 @@ and [Usage](docs/usage.md) for everyday workflows.
 - Manual sync and a configurable periodic timer; duplicate receive commands run once per sync.
 - Contacts and calendars: browse, search, create, edit original source and delete.
 - CardDAV/CalDAV local vCard/iCalendar and JMAP JSContact/JSCalendar files.
+- Calendar attachment and inline invitation previews; Add to Calendar for local
+  CalDAV collections, and reviewed Accept/Decline reply drafts.
 - Optional GnuPG PGP/MIME signing, encryption, decryption and verification status.
 - TOML settings editor and configurable colors.
 
@@ -141,8 +143,12 @@ chosen external command. MailSalonGUI itself does not log into IMAP, JMAP,
 CardDAV or CalDAV servers. Your sync tool handles remote changes and credentials.
 
 This first GUI release has a calendar item list, rather than a month/week grid.
-It preserves recurrence in source but does not expand recurrences, manage RSVPs
-or show reminders. Contact/event editing uses the native source so fields not
+It preserves recurrence in source but does not expand recurrences or show
+reminders. Accept/Decline prepares an iCalendar reply for the invited account;
+sending the draft and adding the event locally are separate actions. iCalendar
+imports require a CalDAV collection; conversion to JMAP calendar JSON and
+automatic cancellation/delegation handling are not supported. Contact/event
+editing uses the native source so fields not
 shown in the simple creation form are retained. Mail search currently matches
 sender and subject; contact suggestions use the picker rather than inline
 completion. Terminal `[keybindings]` settings are accepted for config

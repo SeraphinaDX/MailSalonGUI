@@ -23,9 +23,10 @@ import (
 )
 
 type Attachment struct {
-	Filename string
-	MIMEType string
-	Data     []byte
+	Filename       string
+	MIMEType       string
+	Data           []byte
+	CalendarMethod string // METHOD parameter from the incoming MIME part.
 }
 
 type ParsedMessage struct {
@@ -43,16 +44,17 @@ type ParsedMessage struct {
 }
 
 type Draft struct {
-	From              string
-	To                string
-	Cc                string
-	Bcc               string
-	Subject           string
-	Body              string
-	InReplyTo         string
-	References        string
-	Attachments       []string
-	MemoryAttachments []Attachment
+	CalendarReplyAddress string // RSVP identity; preserved in saved drafts.
+	From                 string
+	To                   string
+	Cc                   string
+	Bcc                  string
+	Subject              string
+	Body                 string
+	InReplyTo            string
+	References           string
+	Attachments          []string
+	MemoryAttachments    []Attachment
 }
 
 var wordDecoder = &mime.WordDecoder{CharsetReader: charset.NewReaderLabel}
@@ -110,6 +112,22 @@ func NormalizeAddressList(raw string) (string, error) {
 }
 
 func Build(d Draft) ([]byte, error) {
+	if d.CalendarReplyAddress != "" {
+		from, err := mail.ParseAddress(d.From)
+		if err != nil || !strings.EqualFold(from.Address, d.CalendarReplyAddress) {
+			return nil, fmt.Errorf("calendar reply must be sent from %s", d.CalendarReplyAddress)
+		}
+		found := false
+		for _, att := range d.MemoryAttachments {
+			ctype, params, _ := mime.ParseMediaType(att.MIMEType)
+			if ctype == "text/calendar" && strings.EqualFold(params["method"], "REPLY") && len(att.Data) > 0 {
+				found = true
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("calendar response attachment is missing; reopen the invitation response")
+		}
+	}
 	if strings.TrimSpace(d.From) == "" {
 		return nil, fmt.Errorf("from address is empty")
 	}
@@ -218,6 +236,13 @@ func Build(d Draft) ([]byte, error) {
 		if ctype == "" {
 			ctype = "application/octet-stream"
 		}
+		if a.CalendarMethod != "" {
+			mediaType, params, err := mime.ParseMediaType(ctype)
+			if err == nil && mediaType == "text/calendar" {
+				params["method"] = a.CalendarMethod
+				ctype = mime.FormatMediaType(mediaType, params)
+			}
+		}
 		if err := writeAttachment(mw, safeFilename(a.Filename), ctype, a.Data); err != nil {
 			return nil, err
 		}
@@ -233,7 +258,12 @@ func writeAttachment(mw *multipart.Writer, filename, ctype string, data []byte) 
 		filename = "attachment"
 	}
 	h := make(textproto.MIMEHeader)
-	h.Set("Content-Type", fmt.Sprintf(`%s; name=%q`, ctype, filename))
+	mediaType, params, err := mime.ParseMediaType(ctype)
+	if err != nil {
+		return fmt.Errorf("invalid attachment content type: %w", err)
+	}
+	params["name"] = filename
+	h.Set("Content-Type", mime.FormatMediaType(mediaType, params))
 	h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, filename))
 	h.Set("Content-Transfer-Encoding", "base64")
 	part, err := mw.CreatePart(h)
@@ -354,8 +384,19 @@ func parseEntity(h textproto.MIMEHeader, body io.Reader, p *ParsedMessage) (mime
 		filename = params["name"]
 	}
 	filename = decodeHeader(filename)
-	if strings.EqualFold(disp, "attachment") || filename != "" {
-		p.Attachments = append(p.Attachments, Attachment{Filename: filename, MIMEType: ctype, Data: decoded})
+	calendar := strings.EqualFold(ctype, "text/calendar") || strings.EqualFold(filepath.Ext(filename), ".ics")
+	if calendar || strings.EqualFold(disp, "attachment") || filename != "" {
+		if calendar && filename == "" {
+			filename = "invitation.ics"
+		}
+		if calendar && params["charset"] != "" {
+			if r, err := charset.NewReaderLabel(params["charset"], bytes.NewReader(decoded)); err == nil {
+				if converted, err := io.ReadAll(r); err == nil {
+					decoded = converted
+				}
+			}
+		}
+		p.Attachments = append(p.Attachments, Attachment{Filename: filename, MIMEType: ctype, Data: decoded, CalendarMethod: params["method"]})
 		return mimeBody{}, nil
 	}
 

@@ -1,5 +1,26 @@
 # Validation
 
+## 0.1.9
+
+- Full software-driver tests and vet passed. GUI, PIM and MIME race checks
+  passed; the native Linux cgo/X11 build reports 0.1.9.
+- MIME checks covered unnamed inline calendar alternatives, named `.ICS` files,
+  base64/quoted-printable transfer decoding, calendar charsets and reply MIME
+  parameters. Ordinary mail body selection remains intact.
+- A recurring invitation fixture exercised preview details, quoted parameter
+  values, timezone definitions, sequence preservation, correct organizer/attendee
+  addressing, Accept/Decline payloads and saved response draft identity.
+- Local collection checks covered retained recurrence/alarms/extensions,
+  scheduling METHOD removal, multiple UIDs, all-day dates, opaque sync filenames,
+  UID path safety, duplicate imports, sync locks, changed-file confirmations and
+  preventing instance-only updates from erasing a recurring series.
+- Software-driver GUI checks opened the response draft and completed a real
+  local import through the chooser. Invitation, response-draft and existing HTML
+  preview screenshots were inspected.
+- No real invitation replies were sent and no remote calendar server was used.
+  JMAP conversion, delegated scheduling and automatic cancellations are outside
+  this release. Native desktop interaction was not exercised headlessly.
+
 ## 0.1.8
 
 - The full software-driver Go suite and vet passed. GUI/MIME tests with the
