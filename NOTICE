@@ -1,0 +1,12 @@
+MailSalonGUI is a separate Go/Fyne application.
+Local backend packages in internal/config, maildir, mimeutil, transport, pim,
+and pgp were adapted from MailSalon by Britney Lozza:
+https://github.com/SeraphinaDX/MailSalon
+Reference commit: 206def078a21547916f7f6242907cde81de9c7d5 (MailSalon 0.6.1).
+MailSalonGUI does not import or execute the MailSalon terminal application.
+The original license is preserved in LICENSE (GNU GPL version 3).
+Modifications: independent config path, cross-platform command selection,
+Reply-To support, draft persistence and the new graphical interface.
+
+MailSalonGUI is licensed under GPL-3.0-only (GPLv3).
+Copyright (C) 2026 MailSalonGUI contributors.

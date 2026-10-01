@@ -1,0 +1,57 @@
+# MailSalonGUI configuration. Linux: ~/.config/mailsalongui/config.toml
+# Existing MailSalon TOML files can also be passed with -config=PATH.
+# Credentials belong in your sync/sending tool, not in this file.
+
+[[accounts]]
+name = "personal"
+maildir = "~/Maildir"
+from = "Your Name <you@example.com>"
+# signature_file = "~/.signature"
+trash_folder = "Trash"
+archive_folder = "Archive"
+download_dir = "~/Downloads"
+receive = "MailSalonSync -plain sync"
+send = "MailSalonSync -plain jmap-send -account personal-jmap"
+
+# Optional GnuPG support (configure your keyring first).
+# [accounts.gpg]
+# enabled = true
+# command = "gpg"
+# sign_key = "you@example.com"
+# auto_sign = false
+# auto_encrypt = false
+# encrypt_to_self = true
+
+# Add more [[accounts]] blocks for additional identities and Maildirs.
+# Set receive/send to your own MailSalonSync, mbsync or msmtp commands.
+
+[options]
+default_account = "personal"
+startup_sync = false
+sync_interval = "5m"  # Go duration; "0" disables the timer.
+auto_add_reply_contacts = true
+
+[theme]
+background = "#14101c"
+foreground = "#f2e5ee"
+muted = "#b39aad"
+border = "#594355"
+active_border = "#dfa8e5"
+title = "#f5a7ce"
+selected_bg = "#725068"
+selected_fg = "#fff2fa"
+error = "#ff758f"
+
+# Optional contacts/calendars. These paths must match MailSalonSync.
+# account can be omitted for a collection shared by all accounts.
+# [[collections]]
+# name = "Personal contacts"
+# account = "personal"
+# protocol = "carddav"  # or "jmap-contacts"
+# local_dir = "~/PIM/contacts/personal"
+#
+# [[collections]]
+# name = "Personal calendar"
+# account = "personal"
+# protocol = "caldav"  # or "jmap-calendars"
+# local_dir = "~/PIM/calendars/personal"
