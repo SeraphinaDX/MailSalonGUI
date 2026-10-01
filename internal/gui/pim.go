@@ -247,7 +247,7 @@ func (v *collectionView) create() {
 		}()
 	})
 	w.SetContent(container.NewBorder(nil, container.NewHBox(save, widget.NewButton("Cancel", w.Close)), nil, nil, form))
-	w.Show()
+	showWindow(w)
 }
 func (v *collectionView) edit() {
 	item, ok := v.selectedItem()
@@ -310,7 +310,7 @@ func (v *collectionView) edit() {
 		}, w)
 	})
 	w.SetContent(container.NewBorder(widget.NewLabel("Edit the original vCard, iCalendar or JSON. Keep its UID and any fields you need."), save, nil, nil, editor))
-	w.Show()
+	showWindow(w)
 }
 func (v *collectionView) remove() {
 	item, ok := v.selectedItem()
@@ -400,7 +400,7 @@ func (a *App) pickContact(c *composer, destination *widget.Entry) {
 	})
 	w.SetOnClosed(func() { alive = false })
 	w.SetContent(container.NewBorder(container.NewVBox(search, info), add, nil, nil, list))
-	w.Show()
+	showWindow(w)
 	collections := a.visibleCollections(true, c.account)
 	go func() {
 		seen := map[string]bool{}

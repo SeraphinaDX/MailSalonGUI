@@ -100,7 +100,7 @@ func (a *App) compose(d mimeutil.Draft, index int, id string) *composer {
 	})
 	c.window.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyReturn, Modifier: fyne.KeyModifierControl}, func(fyne.Shortcut) { c.send() })
 	c.window.SetCloseIntercept(c.requestClose)
-	c.window.Show()
+	showWindow(c.window)
 	if d.InReplyTo != "" {
 		c.window.Canvas().Focus(c.body)
 	} else {
@@ -369,5 +369,5 @@ func (a *App) showDrafts() {
 		empty.SetText("No saved drafts yet.")
 	}
 	w.SetContent(container.NewBorder(empty, container.NewHBox(open, remove), nil, nil, list))
-	w.Show()
+	showWindow(w)
 }

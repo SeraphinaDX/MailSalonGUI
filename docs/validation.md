@@ -1,5 +1,22 @@
 # Validation
 
+## 0.1.6
+
+- `go test -tags ci ./...` and `go vet -tags ci ./...` passed.
+- The native Linux cgo/X11 build passed and reports version 0.1.6.
+- Generated launchers passed `desktop-file-validate` 0.27. GIO resolved their
+  icons to the correct absolute paths and launched the installed binary with
+  normal paths, spaces, quotes, dollar signs, backticks and backslashes.
+  Icon directories containing a percent sign or tab also worked.
+- Install/uninstall checks used stand-in cache commands to verify KDE 6
+  preference, KDE 5 fallback, nonfatal refresh failures and preservation of
+  unrelated files. DESTDIR installs kept runtime executable/icon paths and
+  invoked no host cache tools.
+- Main and auxiliary window show sites now apply X11 desktop identity after
+  the native handle is created. Actual X11 property changes and KDE taskbar
+  rendering still require a graphical desktop session and were not exercised
+  in this environment.
+
 ## 0.1.5
 
 - Generated and inspected a rose/plum envelope icon with a transparent border,

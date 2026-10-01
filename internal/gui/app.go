@@ -27,7 +27,7 @@ import (
 	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
 )
 
-const Version = "0.1.5"
+const Version = "0.1.6"
 
 type App struct {
 	Fyne                               fyne.App
@@ -684,7 +684,7 @@ func (a *App) showSource() {
 			text.Disable()
 			w.SetContent(container.NewBorder(nil, widget.NewButton("Copy source", func() { w.Clipboard().SetContent(string(raw)) }), nil, nil, text))
 			w.Resize(fyne.NewSize(800, 600))
-			w.Show()
+			showWindow(w)
 		})
 	}()
 }
