@@ -1,5 +1,20 @@
 # Validation
 
+## 0.2.1
+
+- Full software-driver tests and vet passed; GUI race tests passed. The native
+  Linux build reports 0.2.1.
+- Letter-key tests deliver both key and rune events and verify one reply,
+  reply-all or forward draft for the selected mail, plus compose with no selection.
+- Local Maildir tests verify bulk read/unread and archive through letter keys,
+  and deletion only after the existing confirmation.
+- Focus/selection tests cover normal search/draft typing, Ctrl/Alt/Super guards,
+  existing Ctrl+R, hidden tabs, group selection, no selection and modal blocking.
+- Navigation, source, search and both help entry points were exercised. The
+  software-rendered shortcut help was inspected at the normal window size.
+- No mail was sent or remotely synchronized; native KDE key input was not
+  available in the headless environment.
+
 ## 0.2.0
 
 - Full software-driver tests and vet passed; GUI/PIM race checks passed. The

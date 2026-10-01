@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+- Add focused message-list shortcuts for reply/reply all, forward, archive,
+  read/unread, confirmed delete, compose, source, search and next/previous mail.
+- Keep printable keys local to the visible list, guard single-message actions
+  and modal dialogs, and retain existing bulk selection and Ctrl shortcuts.
+- Add Help → Keyboard shortcuts and `?` in the list for key discovery.
+
 ## 0.2.0
 
 - Replace the calendar's source list with month, week, day and agenda views,

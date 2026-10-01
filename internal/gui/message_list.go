@@ -26,6 +26,7 @@ type messageList struct {
 	onSelectionChanged func()
 	modifiers          func() fyne.KeyModifier
 	onShortcut         func(fyne.Shortcut)
+	onRune             func(rune)
 	onDelete           func()
 	onSelected         func(int)
 	// Resolve lazily: GLFW is initialized only after a desktop window opens.
@@ -185,6 +186,14 @@ func (l *messageList) TypedShortcut(shortcut fyne.Shortcut) {
 // keyboard navigation position, rather than List's private pointer focus.
 func (l *messageList) FocusGained() { l.Refresh() }
 func (l *messageList) FocusLost()   { l.Refresh() }
+
+// Printable keys arrive through TypedRune as well as TypedKey on the desktop.
+// Handle mail letters only here so one keypress cannot perform an action twice.
+func (l *messageList) TypedRune(r rune) {
+	if l.modifiers()&(fyne.KeyModifierControl|fyne.KeyModifierAlt|fyne.KeyModifierSuper) == 0 && l.onRune != nil {
+		l.onRune(r)
+	}
+}
 func (l *messageList) TypedKey(event *fyne.KeyEvent) {
 	if l.Length() == 0 {
 		return

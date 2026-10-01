@@ -56,6 +56,16 @@ become available after its preview loads; message changes briefly disable
 conflicting actions. A reload or different selection closes the menu.
 Sync with your configured tool to propagate local changes.
 
+With the message list focused, press **r** to reply, **Shift+r** to reply all,
+**f** to forward, **e** to archive, or **u** to toggle read/unread. Archive,
+read/unread and **d** (confirmed delete) apply to every selected message.
+Reply, forward and **s** (source) require one selected message; reply/forward
+also wait for its preview to finish loading. **n** opens a new draft,
+**/** focuses search, and **j / k** select the next/previous message.
+Use **?** or **Help → Keyboard shortcuts** for the full list. Letter shortcuts
+are inactive in text fields, other tabs and modal dialogs. Ctrl/Alt/Super-modified
+letters do not invoke these actions; existing Ctrl shortcuts still work.
+
 ## Compose and drafts
 
 **Compose** opens an independent window. Choose From, enter To/Cc/Bcc, subject
@@ -179,6 +189,16 @@ to with Accept/Decline. Replies from other attendees are previewed only.
 | Main window | Ctrl+R | Reply to selected message |
 | Main window | Ctrl+F | Focus mail search |
 | Main window | F5 | Sync |
+| Message list | r / Shift+r | Reply / reply all (one loaded message) |
+| Message list | f | Forward (one loaded message) |
+| Message list | e | Archive selected messages |
+| Message list | u | Toggle selected messages read/unread |
+| Message list | d | Confirm deleting selected messages |
+| Message list | n | New message |
+| Message list | s | View source (one message) |
+| Message list | / | Focus mail search |
+| Message list | j / k | Next / previous message |
+| Message list | ? | Show keyboard shortcut help |
 | Message list | Delete / Backspace / numpad . / Del | Confirm deleting selected mail |
 | Message list | Up / Down / Home / End | Select a message |
 | Message list | Ctrl-click | Add/remove a message from selection |
