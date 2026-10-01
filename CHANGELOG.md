@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1
+
+- Delete in the focused message list opens the existing deletion confirmation.
+- Right-click messages for reply, forward, read/unread, archive, delete and source.
+- Right-click selects the targeted email; stale menu actions are ignored after reloads.
+- Arrow keys, Home and End select messages, following the clicked row.
+
 ## 0.1.0
 
 - Independent MailSalonGUI codebase in Go and Fyne.

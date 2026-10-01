@@ -15,6 +15,11 @@ The dialog initially opens the account's download directory when it exists.
 **Archive** moves a message into the existing configured archive folder.
 **Delete** asks for confirmation and moves it to Trash. Deleting a message
 already in Trash asks for confirmation before permanently removing it.
+Press **Delete** with the message list focused to open the same confirmation.
+Right-click an email for reply/reply all, forward, mark read/unread, archive,
+delete and source actions. The menu selects the clicked email. Reply actions
+become available after its preview loads; message changes briefly disable
+conflicting actions. A reload or different selection closes the menu.
 Sync with your configured tool to propagate local changes.
 
 ## Compose and drafts
@@ -73,6 +78,8 @@ leaves its list empty. It is safe to use mail without contacts or calendars.
 | Main window | Ctrl+R | Reply to selected message |
 | Main window | Ctrl+F | Focus mail search |
 | Main window | F5 | Sync |
+| Message list | Delete | Confirm deleting selected mail |
+| Message list | Up / Down / Home / End | Select a message |
 | Compose | Ctrl+S | Save local draft |
 | Compose | Ctrl+Enter | Confirm sending |
 | Editable fields | Ctrl+A/C/X/V | Select, copy, cut, paste |
