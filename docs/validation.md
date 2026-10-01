@@ -1,5 +1,25 @@
 # Validation
 
+## 0.2.0
+
+- Full software-driver tests and vet passed; GUI/PIM race checks passed. The
+  native Linux cgo/X11 build reports 0.2.0.
+- Calendar UI tests exercised all four views, actual month-cell event taps,
+  busy-day overflow, Go to date, Today, new-event date/timezone defaults,
+  tooltips, search, month-end navigation and rejection of stale worker results.
+- Layout checks verified separate overlap lanes, midnight clipping and
+  exclusive all-day ends. Software-rendered month/week/day/agenda screenshots
+  were inspected at the application's normal window size.
+- Occurrence tests covered iCalendar and JSCalendar rules, exclusions, extra
+  dates, moved/cancelled instances, timezone conversion, DST transitions,
+  nominal duration and monthly recurrence over missing month-end dates. Source
+  data stays intact. Unsupported/dense rules retain an inspection path.
+- A separate source test refuses nonexistent local wall times instead of
+  silently moving an appointment to a different hour.
+- No remote calendar sync or native desktop interaction was exercised. The
+  views use existing guarded collection CRUD; dragging/resizing appointments,
+  occurrence-only editing and reminders are outside this update.
+
 ## 0.1.9
 
 - Full software-driver tests and vet passed. GUI, PIM and MIME race checks

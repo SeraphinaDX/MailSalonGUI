@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0
+
+- Replace the calendar's source list with month, week, day and agenda views,
+  including Today, date navigation, local/UTC display, search and event details.
+- Place timed meetings in a 24-hour grid, separate all-day events, split
+  overlapping appointments into lanes and show overflow links on busy days.
+- Expand supported iCalendar/JSCalendar recurrences, exclusions and moved or
+  cancelled instances without changing source data; bound worker expansion and
+  keep unsupported events accessible through Unplaced events.
+- Prefill new events from the displayed date and preserve guarded source editing
+  and series deletion. Bump to 0.2.0 for the new calendar interface.
+
 ## 0.1.9
 
 - Detect named iCalendar attachments and inline calendar MIME parts without

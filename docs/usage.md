@@ -99,10 +99,45 @@ exclusive, and must be later than the start.
 properties you want to retain. Saving validates the format and refuses to
 overwrite an item changed since the editor opened. **Delete** retains a copy in
 the sync tool's local `.mss-trash` directory. Calendar recurrence data is
-preserved but no recurring agenda is expanded in this release.
+preserved in the original resource while supported rules are expanded for display.
 
 A view without configured collections explains how to add them in TOML and
 leaves its list empty. It is safe to use mail without contacts or calendars.
+
+### Calendar views
+
+Choose **Month**, **Week**, **Day**, or **Agenda** above the calendar. Month shows
+a six-week grid starting on Monday; a busy day has a **+N more…** link to Day
+view. Click a day heading to open that date. Week and Day show a scrollable
+24-hour schedule, starting at 08:00, with separate all-day rows. Overlapping
+appointments use separate columns. Hover a truncated event for its full label,
+or click it for details. Agenda lists the next 30 days, including continuations
+of multi-day events.
+
+Use the arrows to move by a month, week, day, or 30-day agenda period. **Today**
+returns to the current date; **Go to date…** accepts `YYYY-MM-DD`. Calendar search
+filters the selected collection in every view. **Local time / UTC** controls
+the displayed clock; all-day dates and floating events stay on their civil dates.
+IANA timezones are converted for display and recurrence retains the event's
+timezone through daylight-saving changes.
+
+Click an appointment to show its actual occurrence dates and details. **New
+event** starts with the selected date at 09:00–10:00. **Edit source** and **Delete**
+operate on the complete local resource; for a recurring event that means the
+whole series. This release does not offer dragging/resizing, instance-only
+editing, or reminders.
+
+Common daily/weekly/monthly/yearly rules, additional dates, excluded dates and
+moved/cancelled recurrence exceptions are displayed for iCalendar and JSCalendar
+events. Expansion is limited to the visible interval and bounded so dense or
+very old rules cannot occupy the interface indefinitely. **Unplaced events…**
+shows sources whose timezone, duration, or recurrence cannot be displayed;
+**Show details** selects their original resource for inspection/editing. Custom
+non-IANA timezone definitions, sub-daily rules, iCalendar RDATE periods and
+THISANDFUTURE updates are preserved but require source inspection. JSCalendar
+non-Gregorian rules and nested location override patches also remain unplaced.
+Rules needing skip adjustments or nonexistent local wall times are likewise
+reported for inspection rather than silently shifted to another hour/date.
 
 ### Calendar invitations in mail
 
