@@ -1,5 +1,20 @@
 # Validation
 
+## 0.1.4
+
+- Compiled the standard `evdev+us` XKB map offline and confirmed that KPDL
+  (91) has KP_Delete/KP_Decimal while KPPT/I129 (129) also has KP_Decimal.
+  GLFW's X11 reverse table keeps the last key for KP_DECIMAL, explaining why
+  the previous lookup can miss the physical . / Del key.
+- The X11 build now asks `XKeysymToKeycode` for KP_Delete on GLFW's display.
+  No scan-code constants are used in the application.
+- Tests check the diagnostic's native KeyDown capture, version and scan-code
+  report, copy button, focus recovery and isolation from mail deletion.
+- All package race tests, CI-driver vet and native Linux compilation passed.
+- A native display could not be started because this environment forbids its
+  listening sockets. Physical-key verification remains a desktop check; the
+  Help menu diagnostic makes the received event available if it still fails.
+
 ## 0.1.3
 
 - Keypad regression tests cover Fyne's unknown, period and comma events for

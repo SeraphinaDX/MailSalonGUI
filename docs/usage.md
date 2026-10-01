@@ -18,6 +18,10 @@ already in Trash asks for confirmation before permanently removing it.
 Press **Delete** or **Backspace** with the message list focused to open the same confirmation.
 The numpad **. / Del** key also opens confirmation in the message list, with
 Num Lock on or off. In text fields it keeps its normal editing behavior.
+If a key does not work, open **Help → Keyboard diagnostic**, press the key in
+that window, and choose **Copy report**. The report includes the app version,
+received key name and scan code, expected keypad Delete scan code, and whether
+it matches. The diagnostic window does not perform mail actions.
 Right-click an email for reply/reply all, forward, mark read/unread, archive,
 delete and source actions. The menu selects the clicked email. Reply actions
 become available after its preview loads; message changes briefly disable

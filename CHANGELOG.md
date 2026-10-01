@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4
+
+- Resolve the numpad Delete key directly through X11's KP_Delete mapping,
+  avoiding GLFW reverse-lookup collisions with a second keypad decimal key.
+- Add Help → Keyboard diagnostic to inspect and copy native key events in a
+  separate window without deleting mail.
+
 ## 0.1.3
 
 - Recognize the numpad . / Del key in the focused message list using its native
