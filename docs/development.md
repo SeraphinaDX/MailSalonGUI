@@ -49,6 +49,25 @@ Local composition drafts are private JSON files with atomic replacement. They
 store file paths for newly attached files, and bytes for forwarded attachments.
 They are separate from synchronized mail folders.
 
+## Message body previews
+
+MIME parsing keeps plain alternatives for quoting and structured HTML spans
+for display. `multipart/alternative` chooses one display version; mixed and
+related body sections stay in source order. HTML attachments remain attachments.
+Text character sets are decoded before `golang.org/x/net/html` parses markup.
+
+`internal/mimeutil/html.go` converts content into text/style/link spans with
+structural line breaks and HTML whitespace rules. `internal/gui/message_body.go`
+turns those spans into Fyne text and hyperlink segments. Raw message markup is
+never interpreted as Markdown. Images are represented by alt text or linked
+labels, and scripts/styles/hidden preheaders are excluded. Only HTTP, HTTPS and
+mailto links are actionable. HTML CSS layouts and remote image rendering are
+outside this simplified preview.
+
+`ParsedMessage.DisplayText` includes link destinations for Copy body. Replies
+and forwards use `Body`, preserving a meaningful plain alternative. For HTML-only
+mail, `Body` contains the readable HTML conversion with its destinations.
+
 ## Icon and desktop packaging
 
 `internal/assets/icon.png` is embedded through `internal/assets/assets.go`.

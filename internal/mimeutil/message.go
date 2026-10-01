@@ -8,7 +8,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
-	"html"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -17,9 +16,10 @@ import (
 	"net/textproto"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
+
+	"golang.org/x/net/html/charset"
 )
 
 type Attachment struct {
@@ -38,6 +38,7 @@ type ParsedMessage struct {
 	MessageID   string
 	References  string
 	Body        string
+	HTMLPreview []BodySpan
 	Attachments []Attachment
 }
 
@@ -54,24 +55,7 @@ type Draft struct {
 	MemoryAttachments []Attachment
 }
 
-var (
-	wordDecoder  = &mime.WordDecoder{}
-	tagRE        = regexp.MustCompile(`(?s)<[^>]*>`)
-	commentRE    = regexp.MustCompile(`(?is)<!--.*?-->`)
-	headRE       = regexp.MustCompile(`(?is)<head\b[^>]*>.*?</head\s*>`)
-	scriptRE     = regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script\s*>`)
-	styleRE      = regexp.MustCompile(`(?is)<style\b[^>]*>.*?</style\s*>`)
-	brRE         = regexp.MustCompile(`(?is)<br\s*/?\s*>`)
-	hrRE         = regexp.MustCompile(`(?is)<hr\b[^>]*>`)
-	liOpenRE     = regexp.MustCompile(`(?is)<li\b[^>]*>`)
-	liCloseRE    = regexp.MustCompile(`(?is)</li\s*>`)
-	blockCloseRE = regexp.MustCompile(`(?is)</(?:p|div|section|article|header|footer|h[1-6]|blockquote|pre)\s*>`)
-	rowCloseRE   = regexp.MustCompile(`(?is)</tr\s*>`)
-	cellCloseRE  = regexp.MustCompile(`(?is)</t[dh]\s*>`)
-	anchorRE     = regexp.MustCompile(`(?is)<a\b[^>]*href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>(.*?)</a\s*>`)
-	spaceRE      = regexp.MustCompile(`[ \t]+`)
-	blankRE      = regexp.MustCompile(`\n{3,}`)
-)
+var wordDecoder = &mime.WordDecoder{CharsetReader: charset.NewReaderLabel}
 
 func ParseFile(path string) (*ParsedMessage, error) {
 	f, err := os.Open(path)
@@ -103,14 +87,13 @@ func parseMessage(r io.Reader) (*ParsedMessage, error) {
 		MessageID:  strings.TrimSpace(m.Header.Get("Message-ID")),
 		References: strings.TrimSpace(m.Header.Get("References")),
 	}
-	var plainParts, htmlParts []string
-	if err := parseEntity(textproto.MIMEHeader(m.Header), m.Body, p, &plainParts, &htmlParts); err != nil {
+	body, err := parseEntity(textproto.MIMEHeader(m.Header), m.Body, p)
+	if err != nil {
 		return nil, err
 	}
-	if len(plainParts) > 0 {
-		p.Body = strings.TrimSpace(strings.Join(plainParts, "\n\n"))
-	} else if len(htmlParts) > 0 {
-		p.Body = stripHTML(strings.Join(htmlParts, "\n"))
+	p.Body = strings.TrimSpace(body.text)
+	if body.html {
+		p.HTMLPreview = body.spans
 	}
 	return p, nil
 }
@@ -290,7 +273,16 @@ func SaveAttachments(p *ParsedMessage, dir string) ([]string, error) {
 	return saved, nil
 }
 
-func parseEntity(h textproto.MIMEHeader, body io.Reader, p *ParsedMessage, plainParts, htmlParts *[]string) error {
+// Alternatives describe the same content; mixed/related body sections are
+// combined in source order. Keep those rules separate to avoid dropped text
+// sections or duplicate plain/HTML copies in a formatted preview.
+type mimeBody struct {
+	text        string
+	spans       []BodySpan
+	html, plain bool
+}
+
+func parseEntity(h textproto.MIMEHeader, body io.Reader, p *ParsedMessage) (mimeBody, error) {
 	ctype, params, err := mime.ParseMediaType(h.Get("Content-Type"))
 	if err != nil || ctype == "" {
 		ctype = "text/plain"
@@ -298,27 +290,63 @@ func parseEntity(h textproto.MIMEHeader, body io.Reader, p *ParsedMessage, plain
 	if strings.HasPrefix(ctype, "multipart/") {
 		boundary := params["boundary"]
 		if boundary == "" {
-			return fmt.Errorf("multipart message has no boundary")
+			return mimeBody{}, fmt.Errorf("multipart message has no boundary")
 		}
 		mr := multipart.NewReader(body, boundary)
+		var parts []mimeBody
 		for {
 			part, err := mr.NextPart()
 			if err == io.EOF {
 				break
 			}
 			if err != nil {
-				return err
+				return mimeBody{}, err
 			}
-			if err := parseEntity(part.Header, part, p, plainParts, htmlParts); err != nil {
-				return err
+			content, err := parseEntity(part.Header, part, p)
+			if err != nil {
+				return mimeBody{}, err
+			}
+			if strings.TrimSpace(content.text) != "" {
+				parts = append(parts, content)
 			}
 		}
-		return nil
+		if len(parts) == 0 {
+			return mimeBody{}, nil
+		}
+		if ctype == "multipart/alternative" {
+			display := parts[len(parts)-1]
+			for _, part := range parts {
+				if part.html {
+					display = part
+				}
+			}
+			quote := display
+			for _, part := range parts {
+				if part.plain {
+					quote = part
+					break
+				}
+			}
+			return mimeBody{text: quote.text, spans: display.spans, html: display.html, plain: quote.plain}, nil
+		}
+		var combined mimeBody
+		var texts []string
+		for _, part := range parts {
+			texts = append(texts, part.text)
+			if len(combined.spans) > 0 {
+				combined.spans = append(combined.spans, BodySpan{Text: "\n\n"})
+			}
+			combined.spans = append(combined.spans, part.spans...)
+			combined.html = combined.html || part.html
+			combined.plain = combined.plain || part.plain
+		}
+		combined.text = strings.Join(texts, "\n\n")
+		return combined, nil
 	}
 
 	decoded, err := io.ReadAll(decodeTransfer(h.Get("Content-Transfer-Encoding"), body))
 	if err != nil {
-		return err
+		return mimeBody{}, err
 	}
 	disp, dparams, _ := mime.ParseMediaType(h.Get("Content-Disposition"))
 	filename := dparams["filename"]
@@ -328,16 +356,35 @@ func parseEntity(h textproto.MIMEHeader, body io.Reader, p *ParsedMessage, plain
 	filename = decodeHeader(filename)
 	if strings.EqualFold(disp, "attachment") || filename != "" {
 		p.Attachments = append(p.Attachments, Attachment{Filename: filename, MIMEType: ctype, Data: decoded})
-		return nil
+		return mimeBody{}, nil
 	}
 
 	switch strings.ToLower(ctype) {
-	case "text/plain":
-		*plainParts = append(*plainParts, string(decoded))
-	case "text/html":
-		*htmlParts = append(*htmlParts, string(decoded))
+	case "text/plain", "text/html":
+		textReader := io.Reader(bytes.NewReader(decoded))
+		if label := params["charset"]; label != "" {
+			textReader, err = charset.NewReaderLabel(label, textReader)
+		} else if strings.EqualFold(ctype, "text/html") {
+			// Also recognize HTML meta charset declarations when MIME omitted one.
+			textReader, err = charset.NewReader(textReader, ctype)
+		}
+		if err != nil {
+			// An unrecognized label must not hide an otherwise readable message.
+			textReader = bytes.NewReader(decoded)
+		}
+		text, err := io.ReadAll(textReader)
+		if err != nil {
+			return mimeBody{}, err
+		}
+		readable := strings.ToValidUTF8(string(text), "\uFFFD")
+		if strings.EqualFold(ctype, "text/html") {
+			spans := parseHTML(readable)
+			display := (&ParsedMessage{HTMLPreview: spans}).DisplayText()
+			return mimeBody{text: display, spans: spans, html: len(spans) > 0}, nil
+		}
+		return mimeBody{text: readable, spans: []BodySpan{{Text: readable}}, plain: true}, nil
 	}
-	return nil
+	return mimeBody{}, nil
 }
 
 func decodeTransfer(enc string, r io.Reader) io.Reader {
@@ -349,60 +396,6 @@ func decodeTransfer(enc string, r io.Reader) io.Reader {
 	default:
 		return r
 	}
-}
-
-func stripHTML(s string) string {
-	// MailSalon is a terminal client, so HTML-only messages are reduced to a
-	// readable text representation rather than exposing raw markup. This is
-	// intentionally conservative: scripts/styles are discarded, structural
-	// elements become whitespace, and useful link destinations are retained.
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	s = strings.ReplaceAll(s, "\r", "\n")
-	s = commentRE.ReplaceAllString(s, "")
-	s = headRE.ReplaceAllString(s, "")
-	s = scriptRE.ReplaceAllString(s, "")
-	s = styleRE.ReplaceAllString(s, "")
-	s = anchorRE.ReplaceAllStringFunc(s, func(match string) string {
-		m := anchorRE.FindStringSubmatch(match)
-		if len(m) != 5 {
-			return match
-		}
-		href := m[1]
-		if href == "" {
-			href = m[2]
-		}
-		if href == "" {
-			href = m[3]
-		}
-		label := strings.TrimSpace(html.UnescapeString(tagRE.ReplaceAllString(m[4], "")))
-		href = strings.TrimSpace(html.UnescapeString(href))
-		if href == "" || href == label {
-			return label
-		}
-		if label == "" {
-			return href
-		}
-		return label + " (" + href + ")"
-	})
-	s = brRE.ReplaceAllString(s, "\n")
-	s = hrRE.ReplaceAllString(s, "\n---\n")
-	s = liOpenRE.ReplaceAllString(s, "\n* ")
-	s = liCloseRE.ReplaceAllString(s, "\n")
-	s = cellCloseRE.ReplaceAllString(s, "\t")
-	s = rowCloseRE.ReplaceAllString(s, "\n")
-	s = blockCloseRE.ReplaceAllString(s, "\n\n")
-	s = tagRE.ReplaceAllString(s, "")
-	s = html.UnescapeString(s)
-	s = strings.ReplaceAll(s, "\u00a0", " ")
-	s = spaceRE.ReplaceAllString(s, " ")
-
-	lines := strings.Split(s, "\n")
-	for i := range lines {
-		lines[i] = strings.TrimSpace(lines[i])
-	}
-	s = strings.Join(lines, "\n")
-	s = blankRE.ReplaceAllString(s, "\n\n")
-	return strings.TrimSpace(s)
 }
 
 func decodeHeader(s string) string {

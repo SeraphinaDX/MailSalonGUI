@@ -27,7 +27,7 @@ import (
 	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
 )
 
-const Version = "0.1.7"
+const Version = "0.1.8"
 
 type App struct {
 	Fyne                               fyne.App
@@ -145,7 +145,7 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 	)
 	manageActions := container.NewHBox(widget.NewButton("Archive", a.archive), widget.NewButtonWithIcon("Delete", theme.DeleteIcon(), a.deleteMessage), widget.NewButton("Copy body", func() {
 		if a.parsed != nil {
-			a.Window.Clipboard().SetContent(a.parsed.Body)
+			a.Window.Clipboard().SetContent(a.parsed.DisplayText())
 		}
 	}), widget.NewButton("Source", a.showSource))
 	preview := container.NewBorder(container.NewVBox(readActions, manageActions, widget.NewSeparator(), a.headers, a.security), container.NewVScroll(a.attachments), nil, nil, container.NewVScroll(a.body))
@@ -392,7 +392,7 @@ func (a *App) loadMessage(id int, autoRead bool) {
 			a.parsed = p
 			a.headers.SetText(fmt.Sprintf("%s\nFrom: %s\nTo: %s\nCc: %s\nDate: %s", p.Subject, p.From, p.To, p.Cc, p.Date))
 			a.security.SetText(info.Summary())
-			a.body.Segments = []widget.RichTextSegment{&widget.TextSegment{Text: p.Body}}
+			a.body.Segments = messageBodySegments(p)
 			a.body.Refresh()
 			a.Window.Content().Refresh()
 			for _, attachment := range p.Attachments {

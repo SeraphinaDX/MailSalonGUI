@@ -8,8 +8,17 @@ parsing. A group selection does not mark all its messages read just by selecting
 them. Use **Read / unread** to change the selected messages' flags. Drag pane dividers
 for a wider list or preview. Search matches sender and subject in this folder.
 
-HTML mail is displayed as text. The reader does not load remote images or run
-web content. **Copy body** copies the displayed text; **Source** shows and copies
+HTML mail uses a simplified formatted preview with headings, paragraphs, bold
+and italic text, lists, table rows and clickable links. When a message has both
+HTML and plain alternatives, the preview shows HTML while replies/forwards
+retain the plain alternative for quoting. Layout follows the content structure;
+complex CSS, columns and browser-specific layouts are not reproduced exactly.
+Remote images are not loaded; image alt text and linked-button labels are kept.
+Scripts and embedded web content do not run. Web links open through your default
+browser, and mailto links through the system's default mail handler. URLs in
+plain mail are clickable too. Very long bare URLs have shortened preview labels,
+with their complete destinations retained for clicking and copying.
+**Copy body** copies readable text including link destinations; **Source** shows and copies
 the original MIME message. Each attachment has a Save button and a file dialog.
 The dialog initially opens the account's download directory when it exists.
 
