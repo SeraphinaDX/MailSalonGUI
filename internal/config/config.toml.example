@@ -30,6 +30,8 @@ default_account = "personal"
 startup_sync = false
 sync_interval = "5m"  # Go duration; "0" disables the timer.
 auto_add_reply_contacts = true
+calendar_default_view = "month"
+calendar_week_start = "monday"
 
 [theme]
 background = "#14101c"

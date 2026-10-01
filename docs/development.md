@@ -1,8 +1,23 @@
 # Working on MailSalonGUI
 
-Start at `cmd/MailSalonGUI/main.go`. It reads flags and TOML, constructs the Fyne
-application and starts the GUI. The GUI imports local backend packages from this
-project; installing the terminal MailSalon client is not required.
+The entry points are `cmd/MailSalonGUI/main.go` (Fyne) and `cmd/MailSalon/main.go`
+(gotui). `internal/gui` and `internal/ui` own their respective interfaces. Both
+import the same backend packages in this module; neither executable requires
+the other to be installed. See [Consolidation](consolidation.md) for provenance,
+build boundaries and migration.
+
+The shared core must not import Fyne, GLFW, gotui or tcell. Terminal builds and
+tests use `CGO_ENABLED=0`; GUI builds retain their existing zgo/cgo path. `make
+test-tui` checks core/terminal packages without the graphics driver; `make test`
+and `make check` cover both interfaces with the Fyne software driver. Versions
+live in `internal/version`; update GUI packaging metadata with the GUI version.
+
+Calendar invitation decoding and bounded recurrence projection live in
+`internal/pim`. MIME parsing populates the common decoded invitation model;
+the GUI and terminal render it independently. JMAP import conversion retains
+the terminal client's explicit unsupported-property checks. Terminal imports
+use the non-replacement API; GUI imports retain reviewed, stale-file-guarded
+replacement. Both use the same collection locking and atomic writer.
 
 ## Window and worker ownership
 

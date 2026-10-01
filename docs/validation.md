@@ -1,5 +1,28 @@
 # Validation
 
+## MailSalonGUI 0.3.0 / MailSalon 0.9.0 consolidation
+
+- The full software-driver suite and vet passed for both commands, both
+  interfaces and the shared core. GUI, terminal, PIM and MIME race tests passed.
+- Terminal/core tests passed with `CGO_ENABLED=0`. Both native Linux builds
+  passed and report their respective release versions; a Windows terminal
+  executable also cross-compiled with cgo disabled.
+- The terminal dependency graph contains no Fyne, OpenGL or GLFW packages.
+  A real pseudo-terminal smoke run started with an empty disposable Maildir,
+  rendered the interface and quit normally using `q`.
+- Original terminal calendar/MIME/config tests run against the shared backend.
+  They cover JMAP conversion, UID deduplication, sync locks, recurrence rules,
+  exclusions, moved/cancelled events, all-day spans and timezone conversion.
+- Additional checks preserve dated VTODO projection, escaped UIDs and cancelled
+  exceptions during import. The GUI honors common calendar view/week-start
+  settings. Both clients' config paths are checked explicitly.
+- The existing GUI tests cover calendar and mail interaction, saved drafts,
+  reviewed RSVP drafts, source editing, confirmations and stale worker results.
+- Migrated terminal documentation links and Go formatting were checked. CI
+  includes both-client tests and an isolated terminal build.
+- No real mail was sent, remotely synchronized or migrated. Native GUI display
+  interaction remains unavailable in the headless environment.
+
 ## 0.2.1
 
 - Full software-driver tests and vet passed; GUI race tests passed. The native

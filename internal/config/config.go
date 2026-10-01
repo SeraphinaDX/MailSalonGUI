@@ -40,6 +40,14 @@ type Account struct {
 }
 
 type Keybindings struct {
+	CalendarMonth    string
+	CalendarWeek     string
+	CalendarDay      string
+	CalendarAgenda   string
+	CalendarToday    string
+	CalendarPrevious string
+	CalendarNext     string
+
 	MailView        string
 	ContactsView    string
 	CalendarView    string
@@ -53,6 +61,7 @@ type Keybindings struct {
 	Search          string
 	Delete          string
 	SaveAttachments string
+	ImportCalendar  string
 	SwitchAccount   string
 	Refresh         string
 	FocusNext       string
@@ -97,6 +106,8 @@ type Config struct {
 	StartupSync          bool
 	SyncInterval         time.Duration
 	AutoAddReplyContacts bool
+	CalendarDefaultView  string
+	CalendarWeekStart    string
 	Theme                Theme
 	Keybindings          Keybindings
 }
@@ -134,6 +145,14 @@ type fileAccount struct {
 }
 
 type fileKeybindings struct {
+	CalendarMonth    string `toml:"calendar_month"`
+	CalendarWeek     string `toml:"calendar_week"`
+	CalendarDay      string `toml:"calendar_day"`
+	CalendarAgenda   string `toml:"calendar_agenda"`
+	CalendarToday    string `toml:"calendar_today"`
+	CalendarPrevious string `toml:"calendar_previous"`
+	CalendarNext     string `toml:"calendar_next"`
+
 	MailView        string `toml:"mail_view"`
 	ContactsView    string `toml:"contacts_view"`
 	CalendarView    string `toml:"calendar_view"`
@@ -147,6 +166,7 @@ type fileKeybindings struct {
 	Search          string `toml:"search"`
 	Delete          string `toml:"delete"`
 	SaveAttachments string `toml:"save_attachments"`
+	ImportCalendar  string `toml:"import_calendar"`
 	SwitchAccount   string `toml:"switch_account"`
 	Refresh         string `toml:"refresh"`
 	FocusNext       string `toml:"focus_next"`
@@ -211,6 +231,8 @@ type fileConfig struct {
 		SyncInterval         string `toml:"sync_interval"`
 		DefaultAccount       string `toml:"default_account"`
 		AutoAddReplyContacts *bool  `toml:"auto_add_reply_contacts"`
+		CalendarDefaultView  string `toml:"calendar_default_view"`
+		CalendarWeekStart    string `toml:"calendar_week_start"`
 	} `toml:"options"`
 
 	Theme fileTheme `toml:"theme"`
@@ -239,6 +261,14 @@ func DefaultTheme() Theme {
 
 func DefaultKeybindings() Keybindings {
 	return Keybindings{
+		CalendarMonth:    "M",
+		CalendarWeek:     "W",
+		CalendarDay:      "D",
+		CalendarAgenda:   "G",
+		CalendarToday:    "T",
+		CalendarPrevious: "[",
+		CalendarNext:     "]",
+
 		MailView: "1", ContactsView: "2", CalendarView: "3",
 		Quit:            "q",
 		Compose:         "c",
@@ -250,6 +280,7 @@ func DefaultKeybindings() Keybindings {
 		Search:          "/",
 		Delete:          "d",
 		SaveAttachments: "a",
+		ImportCalendar:  "i",
 		SwitchAccount:   "A",
 		Refresh:         "R",
 		FocusNext:       "Tab",
@@ -285,6 +316,14 @@ func KeybindingsWithDefaults(k Keybindings) Keybindings {
 	set(&d.MailView, k.MailView)
 	set(&d.ContactsView, k.ContactsView)
 	set(&d.CalendarView, k.CalendarView)
+	set(&d.CalendarMonth, k.CalendarMonth)
+	set(&d.CalendarWeek, k.CalendarWeek)
+	set(&d.CalendarDay, k.CalendarDay)
+	set(&d.CalendarAgenda, k.CalendarAgenda)
+	set(&d.CalendarToday, k.CalendarToday)
+	set(&d.CalendarPrevious, k.CalendarPrevious)
+	set(&d.CalendarNext, k.CalendarNext)
+
 	set(&d.Compose, k.Compose)
 	set(&d.Sync, k.Sync)
 	set(&d.Reply, k.Reply)
@@ -294,6 +333,7 @@ func KeybindingsWithDefaults(k Keybindings) Keybindings {
 	set(&d.Search, k.Search)
 	set(&d.Delete, k.Delete)
 	set(&d.SaveAttachments, k.SaveAttachments)
+	set(&d.ImportCalendar, k.ImportCalendar)
 	set(&d.SwitchAccount, k.SwitchAccount)
 	set(&d.Refresh, k.Refresh)
 	set(&d.FocusNext, k.FocusNext)
@@ -328,18 +368,26 @@ func Default() Config {
 		DefaultAccount:       "default",
 		SyncInterval:         5 * time.Minute,
 		AutoAddReplyContacts: true,
+		CalendarDefaultView:  "month",
+		CalendarWeekStart:    "monday",
 		Theme:                DefaultTheme(),
 		Keybindings:          DefaultKeybindings(),
 	}
 }
 
-func DefaultPath() string {
+// DefaultPath retains the desktop default for existing GUI callers.
+func DefaultPath() string { return GUIPath() }
+
+func GUIPath() string      { return clientPath("mailsalongui") }
+func TerminalPath() string { return clientPath("mailsalon") }
+
+func clientPath(client string) string {
 	base, err := os.UserConfigDir()
 	if err != nil {
 		home, _ := os.UserHomeDir()
 		base = filepath.Join(home, ".config")
 	}
-	return filepath.Join(base, "mailsalongui", "config.toml")
+	return filepath.Join(base, client, "config.toml")
 }
 
 func Load(path string) (Config, error) {
@@ -364,6 +412,21 @@ func Load(path string) (Config, error) {
 	}
 
 	cfg.StartupSync = raw.Options.StartupSync
+	if v := strings.ToLower(strings.TrimSpace(raw.Options.CalendarDefaultView)); v != "" {
+		cfg.CalendarDefaultView = v
+	}
+	if v := strings.ToLower(strings.TrimSpace(raw.Options.CalendarWeekStart)); v != "" {
+		cfg.CalendarWeekStart = v
+	}
+	switch cfg.CalendarDefaultView {
+	case "month", "week", "day", "agenda":
+	default:
+		return cfg, fmt.Errorf("options.calendar_default_view must be month, week, day, or agenda")
+	}
+	if cfg.CalendarWeekStart != "monday" && cfg.CalendarWeekStart != "sunday" {
+		return cfg, fmt.Errorf("options.calendar_week_start must be monday or sunday")
+	}
+
 	if raw.Options.AutoAddReplyContacts != nil {
 		cfg.AutoAddReplyContacts = *raw.Options.AutoAddReplyContacts
 	}
@@ -498,6 +561,14 @@ func mergeKeybindings(base Keybindings, raw fileKeybindings) Keybindings {
 	set(&base.MailView, raw.MailView)
 	set(&base.ContactsView, raw.ContactsView)
 	set(&base.CalendarView, raw.CalendarView)
+	set(&base.CalendarMonth, raw.CalendarMonth)
+	set(&base.CalendarWeek, raw.CalendarWeek)
+	set(&base.CalendarDay, raw.CalendarDay)
+	set(&base.CalendarAgenda, raw.CalendarAgenda)
+	set(&base.CalendarToday, raw.CalendarToday)
+	set(&base.CalendarPrevious, raw.CalendarPrevious)
+	set(&base.CalendarNext, raw.CalendarNext)
+
 	set(&base.Compose, raw.Compose)
 	set(&base.Sync, raw.Sync)
 	set(&base.Reply, raw.Reply)
@@ -507,6 +578,7 @@ func mergeKeybindings(base Keybindings, raw fileKeybindings) Keybindings {
 	set(&base.Search, raw.Search)
 	set(&base.Delete, raw.Delete)
 	set(&base.SaveAttachments, raw.SaveAttachments)
+	set(&base.ImportCalendar, raw.ImportCalendar)
 	set(&base.SwitchAccount, raw.SwitchAccount)
 	set(&base.Refresh, raw.Refresh)
 	set(&base.FocusNext, raw.FocusNext)
@@ -530,10 +602,17 @@ func mergeKeybindings(base Keybindings, raw fileKeybindings) Keybindings {
 
 func validateKeybindings(k Keybindings) error {
 	main := map[string]string{
-		"mail_view": k.MailView, "contacts_view": k.ContactsView, "calendar_view": k.CalendarView,
+		"calendar_month":    k.CalendarMonth,
+		"calendar_week":     k.CalendarWeek,
+		"calendar_day":      k.CalendarDay,
+		"calendar_agenda":   k.CalendarAgenda,
+		"calendar_today":    k.CalendarToday,
+		"calendar_previous": k.CalendarPrevious,
+		"calendar_next":     k.CalendarNext,
+		"mail_view":         k.MailView, "contacts_view": k.ContactsView, "calendar_view": k.CalendarView,
 		"quit": k.Quit, "compose": k.Compose, "sync": k.Sync, "reply": k.Reply,
 		"forward": k.Forward, "archive": k.Archive, "toggle_read": k.ToggleRead,
-		"search": k.Search, "delete": k.Delete, "save_attachments": k.SaveAttachments,
+		"search": k.Search, "delete": k.Delete, "save_attachments": k.SaveAttachments, "import_calendar": k.ImportCalendar,
 		"switch_account": k.SwitchAccount, "refresh": k.Refresh, "focus_next": k.FocusNext,
 		"focus_left": k.FocusLeft, "focus_right": k.FocusRight, "move_up": k.MoveUp,
 		"move_down": k.MoveDown, "page_up": k.PageUp, "page_down": k.PageDown,

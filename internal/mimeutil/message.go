@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SeraphinaDX/MailSalonGUI/internal/pim"
 	"golang.org/x/net/html/charset"
 )
 
@@ -30,17 +31,19 @@ type Attachment struct {
 }
 
 type ParsedMessage struct {
-	From        string
-	ReplyTo     string
-	To          string
-	Cc          string
-	Subject     string
-	Date        string
-	MessageID   string
-	References  string
-	Body        string
-	HTMLPreview []BodySpan
-	Attachments []Attachment
+	From           string
+	ReplyTo        string
+	To             string
+	Cc             string
+	Subject        string
+	Date           string
+	MessageID      string
+	References     string
+	Body           string
+	HTMLPreview    []BodySpan
+	CalendarEvents []pim.CalendarEvent
+	CalendarErrors []string
+	Attachments    []Attachment
 }
 
 type Draft struct {
@@ -384,7 +387,7 @@ func parseEntity(h textproto.MIMEHeader, body io.Reader, p *ParsedMessage) (mime
 		filename = params["name"]
 	}
 	filename = decodeHeader(filename)
-	calendar := strings.EqualFold(ctype, "text/calendar") || strings.EqualFold(filepath.Ext(filename), ".ics")
+	calendar := strings.EqualFold(ctype, "text/calendar") || strings.EqualFold(ctype, "application/ics") || strings.EqualFold(ctype, "application/icalendar") || strings.EqualFold(filepath.Ext(filename), ".ics")
 	if calendar || strings.EqualFold(disp, "attachment") || filename != "" {
 		if calendar && filename == "" {
 			filename = "invitation.ics"
@@ -394,6 +397,14 @@ func parseEntity(h textproto.MIMEHeader, body io.Reader, p *ParsedMessage) (mime
 				if converted, err := io.ReadAll(r); err == nil {
 					decoded = converted
 				}
+			}
+		}
+		if calendar {
+			events, err := pim.ParseCalendar(decoded, params["method"])
+			if err != nil {
+				p.CalendarErrors = append(p.CalendarErrors, filename+": "+err.Error())
+			} else {
+				p.CalendarEvents = append(p.CalendarEvents, events...)
 			}
 		}
 		p.Attachments = append(p.Attachments, Attachment{Filename: filename, MIMEType: ctype, Data: decoded, CalendarMethod: params["method"]})

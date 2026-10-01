@@ -1,5 +1,19 @@
 # Changelog
 
+## MailSalonGUI 0.3.0 / MailSalon 0.9.0
+
+- Consolidate the latest terminal client and desktop client in this repository,
+  producing separate executables from one Go module and shared backend packages.
+- Share richer MIME/HTML parsing, invitation detection, recurrence expansion,
+  contacts, Maildir operations, TOML configuration, transport and OpenPGP.
+- Retain terminal keyboard/mouse behavior, calendar views and simple JMAP
+  invitation import, alongside the GUI's draft and reviewed RSVP workflows.
+- Preserve each client's default config path and independent version stream.
+  Accept all terminal calendar options/bindings; both calendars honor initial
+  view and first-weekday settings.
+- Add pure-Go terminal build/test targets, both-client checks, migrated terminal
+  guides and source provenance. Keep MailSalonSync external.
+
 ## 0.2.1
 
 - Add focused message-list shortcuts for reply/reply all, forward, archive,

@@ -25,6 +25,7 @@ type calendarView struct {
 	cursor             time.Time
 	zone               *time.Location
 	mode               string
+	weekStart          time.Weekday
 	occurrences        []pim.Occurrence
 	issues             []pim.CalendarIssue
 	revision           uint64
@@ -38,15 +39,22 @@ func calendarMidnight(t time.Time) time.Time {
 func calendarMonday(t time.Time) time.Time {
 	return calendarMidnight(t).AddDate(0, 0, -(int(t.Weekday())+6)%7)
 }
-func calendarBounds(mode string, date time.Time) (time.Time, time.Time) {
+func calendarBounds(mode string, date time.Time, starts ...time.Weekday) (time.Time, time.Time) {
+	firstDay := time.Monday
+	if len(starts) > 0 {
+		firstDay = starts[0]
+	}
+	weekBeginning := func(t time.Time) time.Time {
+		return calendarMidnight(t).AddDate(0, 0, -(int(t.Weekday())-int(firstDay)+7)%7)
+	}
 	date = calendarMidnight(date)
 	switch mode {
 	case "Month":
 		first := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
-		start := calendarMonday(first)
+		start := weekBeginning(first)
 		return start, start.AddDate(0, 0, 42)
 	case "Week":
-		start := calendarMonday(date)
+		start := weekBeginning(date)
 		return start, start.AddDate(0, 0, 7)
 	case "Agenda":
 		return date, date.AddDate(0, 0, 30)
@@ -56,7 +64,15 @@ func calendarBounds(mode string, date time.Time) (time.Time, time.Time) {
 }
 
 func (v *collectionView) newCalendarView() *calendarView {
-	c := &calendarView{owner: v, zone: time.Local, cursor: calendarMidnight(time.Now()), mode: "Month"}
+	c := &calendarView{owner: v, zone: time.Local, cursor: calendarMidnight(time.Now()), mode: "Month", weekStart: time.Monday}
+	if v.app.cfg.CalendarWeekStart == "sunday" {
+		c.weekStart = time.Sunday
+	}
+	for _, mode := range []string{"Month", "Week", "Day", "Agenda"} {
+		if strings.EqualFold(mode, v.app.cfg.CalendarDefaultView) {
+			c.mode = mode
+		}
+	}
 	c.board = container.NewStack(widget.NewLabel("Loading calendar…"))
 	c.rangeLabel = widget.NewLabelWithStyle("", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	c.status = widget.NewLabel("")
@@ -67,7 +83,7 @@ func (v *collectionView) newCalendarView() *calendarView {
 			c.render()
 		}
 	})
-	c.view.SetSelected("Month")
+	c.view.SetSelected(c.mode)
 	c.timezone = widget.NewSelect([]string{"Local time", "UTC"}, func(value string) {
 		if value == "UTC" {
 			c.zone = time.UTC
@@ -154,7 +170,7 @@ func (c *calendarView) render() {
 	revision, gen := c.revision, v.generation
 	items := append([]pim.Item(nil), v.filtered...)
 	mode, cursor := c.mode, c.cursor
-	from, to := calendarBounds(mode, cursor)
+	from, to := calendarBounds(mode, cursor, c.weekStart)
 	if mode == "Month" {
 		c.rangeLabel.SetText(cursor.Format("January 2006"))
 	} else if mode == "Day" {
@@ -270,8 +286,8 @@ func (c *calendarView) showIssues() {
 
 func (c *calendarView) monthBoard(from, cursor time.Time) fyne.CanvasObject {
 	headers := container.NewGridWithColumns(7)
-	for _, day := range []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"} {
-		headers.Add(widget.NewLabelWithStyle(day, fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
+	for i := 0; i < 7; i++ {
+		headers.Add(widget.NewLabelWithStyle(from.AddDate(0, 0, i).Weekday().String(), fyne.TextAlignCenter, fyne.TextStyle{Bold: true}))
 	}
 	cells := container.NewGridWithColumns(7)
 	for i := 0; i < 42; i++ {

@@ -117,7 +117,7 @@ leaves its list empty. It is safe to use mail without contacts or calendars.
 ### Calendar views
 
 Choose **Month**, **Week**, **Day**, or **Agenda** above the calendar. Month shows
-a six-week grid starting on Monday; a busy day has a **+N more…** link to Day
+a six-week grid starting on the configured weekday (Monday by default); a busy day has a **+N more…** link to Day
 view. Click a day heading to open that date. Week and Day show a scrollable
 24-hour schedule, starting at 08:00, with separate all-day rows. Overlapping
 appointments use separate columns. Hover a truncated event for its full label,
