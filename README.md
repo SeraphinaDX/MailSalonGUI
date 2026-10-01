@@ -1,7 +1,7 @@
 # MailSalonGUI
 
 A standalone desktop version of MailSalon, written in **Go and Fyne**.
-Version **0.1.5**. Its codebase, executable and configuration path are independent
+Version **0.1.6**. Its codebase, executable and configuration path are independent
 of the terminal client. It reads the same local Maildirs and contact/calendar
 files and supports MailSalon's TOML account settings.
 
@@ -63,7 +63,13 @@ make install
 
 This builds and installs for your user under `~/.local`, with no sudo required.
 Launch **MailSalonGUI** from your application menu, then pin that launcher.
-Remove an old generic-X pin first if your desktop keeps its previous icon.
+The launcher references the installed icon directly. On KDE, installation
+refreshes the application cache when `kbuildsycoca6` or `kbuildsycoca5` is
+available. X11/XWayland windows identify their desktop launcher explicitly,
+including compose and other windows.
+If KDE still shows an old paper or generic-X icon, close the app, remove its
+old taskbar pin, run `make install`, then launch and pin the application-menu
+entry again.
 Desktop environments control the final taskbar display; native Wayland
 behavior depends on the Fyne/GLFW backend and compositor.
 

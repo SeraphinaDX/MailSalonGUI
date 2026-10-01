@@ -84,6 +84,6 @@ func main() {
 			dialog.ShowInformation("Welcome to MailSalonGUI", "Open Settings to configure your Maildir and identity in TOML.\n\nOr run MailSalonGUI -demo to explore a temporary offline mailbox.\n\nConfiguration: "+*path, a.Window)
 		}
 	}
-	a.Window.ShowAndRun()
+	a.Run()
 }
 func fatal(err error) { fmt.Fprintln(os.Stderr, "MailSalonGUI:", err); os.Exit(1) }

@@ -32,7 +32,7 @@ func newKeyboardInspectorWindow(f fyne.App, resolve func() int) (fyne.Window, *k
 	w.SetContent(container.NewBorder(widget.NewLabel("Press a key below. This window does not delete messages."),
 		container.NewHBox(copy, widget.NewButton("Close", w.Close)), nil, nil, k))
 	w.Resize(fyne.NewSize(570, 300))
-	w.Show()
+	showWindow(w)
 	w.Canvas().Focus(k)
 	return w, k
 }

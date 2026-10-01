@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.6
+
+- Give X11/XWayland windows an explicit desktop-file identity and a consistent
+  WM_CLASS so KDE associates main and auxiliary windows with the launcher.
+- Use the installed icon's absolute path in the launcher to avoid icon-theme
+  lookup failures, and refresh desktop/KDE caches on install and uninstall.
+- Keep staging paths out of launcher fields and skip host cache updates when
+  installing with DESTDIR.
+
 ## 0.1.5
 
 - Add a rose/plum envelope icon embedded in the app and inherited by its windows.

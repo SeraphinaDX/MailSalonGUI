@@ -44,12 +44,24 @@ The GUI sets the application icon before creating any windows. Keep the app
 ID, desktop-entry filename, installed icon name and Fyne metadata consistent.
 The icon's generation prompt and license are in `internal/assets/README.md`.
 
+Show top-level windows through `showWindow`; the main entry point calls
+`App.Run`. Fyne creates native handles during `Show`, so X11 desktop identity
+is applied afterwards. Both WM_CLASS fields and KDE's
+`_KDE_NET_WM_DESKTOP_FILE` use `assets.AppID`, matching the launcher's
+`StartupWMClass` and filename. This also groups auxiliary windows under the
+same launcher. Other drivers retain Fyne's native behavior.
+
 `make install` builds and installs the binary, icon and launcher under PREFIX,
 which defaults to `~/.local`. `DATADIR` defaults to PREFIX/share; `DESTDIR` is a
-staging root and is never included in the launcher's executable path. Prefixes
+staging root and is never included in the launcher's executable or icon paths. Prefixes
 must be absolute and contain no line breaks, equals signs or percent signs.
 Desktop Exec arguments use the freedesktop string/argument escaping rules.
 The installer invokes no shell through the launcher.
+The launcher's `Icon` is an absolute path with desktop-string escaping,
+separate from `Exec` argument escaping. Install and uninstall refresh the
+desktop database and KDE application cache when their tools are available;
+staged installations skip cache updates. Cache failures are reported without
+undoing the successfully installed files.
 
 `cmd/MailSalonGUI/FyneApp.toml` supplies app identity and icon metadata to Fyne
 packaging tools. Update its version alongside `gui.Version` on release.

@@ -58,7 +58,7 @@ func (a *App) settings() {
 			}
 		}, w)
 	})
-	w.Show()
+	showWindow(w)
 }
 
 // Validate against the same loader used on startup before replacing the file.
