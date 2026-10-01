@@ -37,6 +37,23 @@ Local composition drafts are private JSON files with atomic replacement. They
 store file paths for newly attached files, and bytes for forwarded attachments.
 They are separate from synchronized mail folders.
 
+## Icon and desktop packaging
+
+`internal/assets/icon.png` is embedded through `internal/assets/assets.go`.
+The GUI sets the application icon before creating any windows. Keep the app
+ID, desktop-entry filename, installed icon name and Fyne metadata consistent.
+The icon's generation prompt and license are in `internal/assets/README.md`.
+
+`make install` builds and installs the binary, icon and launcher under PREFIX,
+which defaults to `~/.local`. `DATADIR` defaults to PREFIX/share; `DESTDIR` is a
+staging root and is never included in the launcher's executable path. Prefixes
+must be absolute and contain no line breaks, equals signs or percent signs.
+Desktop Exec arguments use the freedesktop string/argument escaping rules.
+The installer invokes no shell through the launcher.
+
+`cmd/MailSalonGUI/FyneApp.toml` supplies app identity and icon metadata to Fyne
+packaging tools. Update its version alongside `gui.Version` on release.
+
 ## Validation
 
 ```sh

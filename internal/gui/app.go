@@ -18,6 +18,7 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/SeraphinaDX/MailSalonGUI/internal/assets"
 
 	"github.com/SeraphinaDX/MailSalonGUI/internal/config"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/maildir"
@@ -26,7 +27,7 @@ import (
 	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
 )
 
-const Version = "0.1.4"
+const Version = "0.1.5"
 
 type App struct {
 	Fyne                               fyne.App
@@ -72,6 +73,7 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 		a.account = 0
 	}
 	f.Settings().SetTheme(salonTheme{Theme: theme.DefaultTheme(), colors: cfg.Theme})
+	f.SetIcon(assets.Icon)
 	a.Window = f.NewWindow("MailSalonGUI")
 	a.Window.Resize(fyne.NewSize(1280, 820))
 	a.status = widget.NewLabel("Ready")

@@ -10,6 +10,7 @@ import (
 
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/dialog"
+	"github.com/SeraphinaDX/MailSalonGUI/internal/assets"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/config"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/demo"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/drafts"
@@ -75,7 +76,7 @@ func main() {
 	if *noStartup {
 		cfg.StartupSync = false
 	}
-	f := app.NewWithID("ca.cerberusgames.mailsalongui")
+	f := app.NewWithID(assets.AppID)
 	a := gui.New(f, cfg, *path, draftDir)
 	a.Start()
 	if !*demoMode {
