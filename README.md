@@ -1,7 +1,7 @@
 # MailSalonGUI
 
 A standalone desktop version of MailSalon, written in **Go and Fyne**.
-Version **0.1.4**. Its codebase, executable and configuration path are independent
+Version **0.1.5**. Its codebase, executable and configuration path are independent
 of the terminal client. It reads the same local Maildirs and contact/calendar
 files and supports MailSalon's TOML account settings.
 
@@ -49,6 +49,33 @@ go build -buildvcs=false -o MailSalonGUI ./cmd/MailSalonGUI
 never reads your real mailbox and has no send or receive commands. Demo drafts,
 settings and messages are removed on normal exit. Saved attachments go to the
 location you choose in the file dialog.
+
+## Desktop icon and launcher
+
+The envelope icon is embedded in the app, including compose and other windows.
+Rebuild and restart to use it when launching the binary directly.
+
+For a Linux application-menu entry and an icon you can pin to your taskbar:
+
+```sh
+make install
+```
+
+This builds and installs for your user under `~/.local`, with no sudo required.
+Launch **MailSalonGUI** from your application menu, then pin that launcher.
+Remove an old generic-X pin first if your desktop keeps its previous icon.
+Desktop environments control the final taskbar display; native Wayland
+behavior depends on the Fyne/GLFW backend and compositor.
+
+`make uninstall` removes these installed files. For another prefix, use
+`make install PREFIX=/usr/local` with the necessary filesystem permissions.
+`DATADIR` overrides the icon/launcher directory (for example your
+`XDG_DATA_HOME`), and `DESTDIR` supports staged package installation.
+The launcher uses an absolute executable path, so `~/.local/bin` need not be
+in your PATH. Normal configuration lookup remains the same.
+
+Fyne packaging metadata is included in `cmd/MailSalonGUI/FyneApp.toml` for
+platform packages made with the Fyne CLI.
 
 ## Connect your mail
 

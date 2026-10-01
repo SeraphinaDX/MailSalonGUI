@@ -1,0 +1,18 @@
+Website = "https://github.com/SeraphinaDX/MailSalonGUI"
+
+[Details]
+Name = "MailSalonGUI"
+ID = "ca.cerberusgames.mailsalongui"
+Icon = "../../internal/assets/icon.png"
+Version = "0.1.5"
+Build = 6
+
+[LinuxAndBSD]
+GenericName = "Email Client"
+Categories = ["Network", "Email"]
+Comment = "Read local mail, contacts and calendars"
+Keywords = ["mail", "email", "maildir", "contacts", "calendar"]
+
+[Source]
+Repo = "https://github.com/SeraphinaDX/MailSalonGUI"
+Dir = "cmd/MailSalonGUI"

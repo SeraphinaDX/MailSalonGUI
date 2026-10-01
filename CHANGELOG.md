@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.5
+
+- Add a rose/plum envelope icon embedded in the app and inherited by its windows.
+- Add user-local Linux desktop installation with a launcher and hicolor icon.
+- Add Fyne packaging metadata for the application ID, icon and release version.
+
 ## 0.1.4
 
 - Resolve the numpad Delete key directly through X11's KP_Delete mapping,

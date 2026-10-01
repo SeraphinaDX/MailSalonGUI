@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=MailSalonGUI
+GenericName=Email Client
+Comment=Read local mail, contacts and calendars
+Exec=@EXEC@
+Icon=ca.cerberusgames.mailsalongui
+Terminal=false
+Categories=Network;Email;
+Keywords=mail;email;maildir;contacts;calendar;
+StartupWMClass=MailSalonGUI

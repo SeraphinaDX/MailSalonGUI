@@ -1,5 +1,20 @@
 # Validation
 
+## 0.1.5
+
+- Generated and inspected a rose/plum envelope icon with a transparent border,
+  packaged as a 512 × 512 PNG and embedded in the executable.
+- All package CI-driver tests, `go vet -tags ci ./...` and native Linux build
+  passed; the binary reports 0.1.5.
+- Installed desktop entries passed `desktop-file-validate` 0.27. GIO launched
+  a temporary stand-in executable at plain, spaced and shell-special paths.
+- Checked installed icon bytes, executable permissions, matching app/icon ID,
+  Fyne metadata, staged `make install`/`make uninstall`, rejection of invalid
+  desktop executable paths, and preservation of unrelated files on uninstall.
+- Native taskbar rendering cannot be checked without a desktop session. Fyne's
+  app icon is set before the first window, so its native window driver inherits
+  the resource; the desktop launcher installs an icon for menu/pin lookup.
+
 ## 0.1.4
 
 - Compiled the standard `evdev+us` XKB map offline and confirmed that KPDL
