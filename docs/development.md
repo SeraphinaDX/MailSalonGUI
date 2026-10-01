@@ -135,3 +135,19 @@ drafts retain a fixed invited From address and a calendar response attachment.
 Relevant protocol references are [iTIP RFC 5546 §3.2.3](https://www.rfc-editor.org/rfc/rfc5546.html#section-3.2.3),
 [iMIP RFC 6047](https://www.rfc-editor.org/rfc/rfc6047.html), and
 [CalDAV RFC 4791 §4.1](https://www.rfc-editor.org/rfc/rfc4791.html#section-4.1).
+
+`internal/pim/occurrences.go` adapts local iCalendar/JSCalendar resources to
+bounded display occurrences using `github.com/teambition/rrule-go` (MIT).
+`internal/gui/calendar_view.go` controls date ranges, cancellable workers and
+selection; `calendar_widgets.go` owns month cells and overlapping time-grid
+layouts. Display occurrences retain their original source item, so source
+editing never serializes a flattened recurrence. Tests cover timezone/DST and
+exception semantics as well as stale navigation results. Relevant references:
+[iCalendar RFC 5545](https://www.rfc-editor.org/rfc/rfc5545.html) and
+[JSCalendar RFC 8984](https://www.rfc-editor.org/rfc/rfc8984.html).
+
+Calendar screenshot fixtures can be regenerated with an absolute output path:
+
+```sh
+MAILSALONGUI_SCREENSHOT_DIR=/tmp/calendar-views go test -tags ci ./internal/gui -run TestCalendarViewsNavigationAndEventDetails -count=1
+```

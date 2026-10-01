@@ -6,6 +6,7 @@ require (
 	fyne.io/fyne/v2 v2.7.0
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20240506104042-037f3cc74f2a
 	github.com/pelletier/go-toml/v2 v2.4.3
+	github.com/teambition/rrule-go v1.8.2
 	golang.org/x/image v0.24.0
 	golang.org/x/net v0.35.0
 )

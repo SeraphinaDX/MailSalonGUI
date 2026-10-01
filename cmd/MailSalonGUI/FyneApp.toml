@@ -4,8 +4,8 @@ Website = "https://github.com/SeraphinaDX/MailSalonGUI"
 Name = "MailSalonGUI"
 ID = "ca.cerberusgames.mailsalongui"
 Icon = "../../internal/assets/icon.png"
-Version = "0.1.9"
-Build = 10
+Version = "0.2.0"
+Build = 11
 
 [LinuxAndBSD]
 GenericName = "Email Client"

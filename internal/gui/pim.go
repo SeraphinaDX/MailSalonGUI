@@ -31,6 +31,7 @@ type collectionView struct {
 	items, filtered []pim.Item
 	selected        int
 	generation      uint64
+	calendar        *calendarView
 }
 
 func (a *App) visibleCollections(contacts bool, account int) []config.Collection {
@@ -101,9 +102,16 @@ func (a *App) newCollectionView(contacts bool) *collectionView {
 	panes := container.NewHSplit(container.NewBorder(container.NewVBox(v.chooser, v.search), v.info, nil, nil, v.list), container.NewBorder(tools, nil, nil, nil, container.NewVScroll(v.preview)))
 	panes.Offset = 0.4
 	v.content = panes
+	if !contacts {
+		v.calendar = v.newCalendarView()
+		v.content = v.calendar.content
+	}
 	return v
 }
 func (v *collectionView) reloadCollections() {
+	if v.calendar != nil {
+		v.calendar.clear("Loading calendars…")
+	}
 	v.generation++
 	previous := ""
 	if v.current >= 0 && v.current < len(v.collections) {
@@ -137,6 +145,9 @@ func (v *collectionView) reloadCollections() {
 		}
 		v.info.SetText("No " + kind + " collections configured")
 		v.preview.SetText("Add a collection in Settings to use this view:\n\n[[collections]]\nname = \"Personal " + kind + "\"\naccount = \"" + v.app.cfg.Accounts[v.app.account].Name + "\"\nprotocol = \"" + protocol + "\"\nlocal_dir = \"~/PIM/" + kind + "\"\n\nConfigure MailSalonSync to sync the same directory.")
+		if v.calendar != nil {
+			v.calendar.clear(v.preview.Text)
+		}
 		return
 	}
 	v.chooser.Enable()
@@ -156,6 +167,9 @@ func (v *collectionView) load() {
 	v.list.Refresh()
 	v.info.SetText("Loading…")
 	v.preview.SetText("Choose an item")
+	if v.calendar != nil {
+		v.calendar.clear("Loading events…")
+	}
 	go func() {
 		items, err := pim.Load(c)
 		v.app.post(func() {
@@ -165,6 +179,9 @@ func (v *collectionView) load() {
 			if err != nil {
 				v.info.SetText("Unable to read collection")
 				v.app.fail(err)
+				if v.calendar != nil {
+					v.calendar.clear("Unable to read calendar: " + err.Error())
+				}
 				return
 			}
 			v.items = items
@@ -185,6 +202,9 @@ func (v *collectionView) filter() {
 	}
 	v.list.Refresh()
 	v.info.SetText(fmt.Sprintf("%d items · %d shown", len(v.items), len(v.filtered)))
+	if v.calendar != nil {
+		v.calendar.render()
+	}
 }
 func (v *collectionView) selectedItem() (pim.Item, bool) {
 	if v.selected < 0 || v.selected >= len(v.filtered) {
@@ -220,6 +240,12 @@ func (v *collectionView) create() {
 		fields[1].SetPlaceHolder("2026-10-01T10:00:00 or 2026-10-01")
 		fields[2].SetPlaceHolder("2026-10-01T11:00:00 or 2026-10-02")
 		fields[3].SetPlaceHolder("America/Toronto")
+		if v.calendar != nil {
+			day := v.calendar.cursor
+			fields[1].SetText(day.Format("2006-01-02") + "T09:00:00")
+			fields[2].SetText(day.Format("2006-01-02") + "T10:00:00")
+			fields[3].SetText(v.calendar.zone.String())
+		}
 	}
 	var save *widget.Button
 	save = widget.NewButton("Save", func() {
@@ -249,6 +275,7 @@ func (v *collectionView) create() {
 	w.SetContent(container.NewBorder(nil, container.NewHBox(save, widget.NewButton("Cancel", w.Close)), nil, nil, form))
 	showWindow(w)
 }
+
 func (v *collectionView) edit() {
 	item, ok := v.selectedItem()
 	if !ok {
@@ -321,7 +348,11 @@ func (v *collectionView) remove() {
 	if !ok {
 		return
 	}
-	dialog.ShowConfirm("Delete item?", "Remove “"+item.Title+"” locally? Your sync tool can propagate this deletion.", func(ok bool) {
+	prompt := "Remove “" + item.Title + "” locally? Your sync tool can propagate this deletion."
+	if !v.contacts && item.Recurring {
+		prompt += "\n\nThis removes the whole stored series, including all its occurrences."
+	}
+	dialog.ShowConfirm("Delete item?", prompt, func(ok bool) {
 		if !ok {
 			return
 		}
