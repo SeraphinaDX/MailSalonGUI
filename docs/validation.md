@@ -1,5 +1,23 @@
 # Validation
 
+## 0.1.8
+
+- The full software-driver Go suite and vet passed. GUI/MIME tests with the
+  race detector passed, and the native Linux cgo/X11 build reports 0.1.8.
+- A multipart newsletter fixture verified formatted headings, emphasis,
+  paragraph spacing, tables, lists, code, image-button labels and links absent
+  from its plain alternative. Its software-rendered preview was inspected.
+- A link-tap check reached the URL-opening app hook with the exact destination;
+  launching a real browser was not exercised in this headless environment.
+- MIME tests covered malformed markup, source indentation, hidden content,
+  empty alternatives, text charsets, unsupported-charset fallback, HTML
+  attachments and nested alternative/related/mixed body sections in order.
+- URL tests covered entity-decoded destinations, HTML base URLs, protocol-relative
+  links, unsupported schemes, prose punctuation and long tracking URLs. Complete
+  destinations are retained for clicking/copying even when labels are shortened.
+- Native desktop rendering and complex browser/CSS layouts were not tested;
+  the app implements a simplified formatted preview rather than a web renderer.
+
 ## 0.1.7
 
 - `go test -tags ci ./...`, `go vet -tags ci ./...`, and GUI tests with

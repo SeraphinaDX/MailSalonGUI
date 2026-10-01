@@ -1,7 +1,7 @@
 # MailSalonGUI
 
 A standalone desktop version of MailSalon, written in **Go and Fyne**.
-Version **0.1.7**. Its codebase, executable and configuration path are independent
+Version **0.1.8**. Its codebase, executable and configuration path are independent
 of the terminal client. It reads the same local Maildirs and contact/calendar
 files and supports MailSalon's TOML account settings.
 
@@ -121,7 +121,8 @@ and [Usage](docs/usage.md) for everyday workflows.
 
 - Resizable folder, message and preview panes; multiple account selector.
 - Local Maildir and Maildir++ discovery, including container-style INBOX layouts.
-- Plain text messages; HTML-only mail converted to text without fetching remote images.
+- Plain text and simplified formatted HTML previews, with clickable links and image-button labels.
+- Remote images remain unloaded; scripts and embedded web content are excluded.
 - Sender/subject search, read/unread state, archive and two-stage Trash deletion.
 - Multiple message selection with Ctrl-click, Shift-click and Ctrl+A.
 - Bulk read/unread, archive and confirmed deletion from the toolbar, keyboard and context menu.
@@ -169,7 +170,7 @@ cmd/MailSalonGUI/    Entry point and flags
 internal/gui/       Fyne windows, mail view, compose, collections and settings
 internal/config/    TOML loading, validation and embedded example
 internal/maildir/   Local folder discovery, headers and Maildir operations
-internal/mimeutil/  MIME parsing, HTML text conversion and message construction
+internal/mimeutil/  MIME parsing, structured HTML previews and message construction
 internal/transport/ External sync/send commands
 internal/pim/       Contact/calendar parsing and guarded local editing
 internal/pgp/       Optional external GnuPG integration

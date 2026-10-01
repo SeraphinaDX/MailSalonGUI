@@ -1,0 +1,34 @@
+From: Community <community@example.com>
+To: Reader <reader@example.com>
+Subject: A formatted invitation
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary=invite
+
+--invite
+Content-Type: text/plain; charset=utf-8
+
+Please view the formatted invitation.
+--invite
+Content-Type: text/html; charset=utf-8
+
+<!doctype html>
+<html>
+<head><title>Not body text</title><style>p { margin: 20px; }</style></head>
+<body>
+<div style="display:none!important">Invisible preheader</div>
+<table role="presentation"><tr><td>
+<h1>You're invited!</h1>
+<p>Hello <strong>friend</strong>,
+  join us for a <em>relaxed afternoon</em> at the library.</p>
+<p>Bring a notebook and your favourite Go project.<br>Tea and coffee are provided.</p>
+<table><tr><th>Day</th><th>Time</th></tr><tr><td>Thursday</td><td>14:00</td></tr></table>
+<p><a href="https://example.com/rsvp?event=go&amp;source=mail"><img src="https://example.com/button.png" alt="Reserve your place"></a></p>
+<p><a href="https://example.com/details" title="Event details"><img src="https://example.com/details.png"></a></p>
+<ul><li>Show a project</li><li>Ask questions</li></ul>
+<p>Questions? <a href="mailto:community@example.com">Email the organiser</a>.</p>
+<pre>go build ./...
+  go test ./...</pre>
+</td></tr></table>
+<script>alert('not visible')</script>
+</body></html>
+--invite--

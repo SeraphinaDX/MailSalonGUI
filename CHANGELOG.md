@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.8
+
+- Replace regex HTML stripping with HTML parsing and a formatted Fyne preview
+  that preserves paragraphs, headings, emphasis, lists, table rows and code.
+- Display HTML alternatives even when a plain alternative omits links; retain
+  the plain alternative for reply/forward quoting.
+- Make HTML and plain-text URLs clickable, retain image-button link labels,
+  and include complete destinations when copying the displayed body.
+- Decode text character sets, handle empty plain alternatives and malformed
+  markup, and keep hidden content, scripts and remote images out of the preview.
+
 ## 0.1.7
 
 - Add Ctrl-click, Shift-click, Shift navigation and Ctrl+A message selection,
