@@ -3,8 +3,9 @@
 ## Mail
 
 Select an account and folder. Messages appear newest first. Unread messages
-have a dot and bold subject. Selecting a message marks it read after successful
-parsing. Use **Read / unread** to change the flag manually. Drag pane dividers
+have a dot and bold subject. Selecting one message marks it read after successful
+parsing. A group selection does not mark all its messages read just by selecting
+them. Use **Read / unread** to change the selected messages' flags. Drag pane dividers
 for a wider list or preview. Search matches sender and subject in this folder.
 
 HTML mail is displayed as text. The reader does not load remote images or run
@@ -12,9 +13,25 @@ web content. **Copy body** copies the displayed text; **Source** shows and copie
 the original MIME message. Each attachment has a Save button and a file dialog.
 The dialog initially opens the account's download directory when it exists.
 
-**Archive** moves a message into the existing configured archive folder.
-**Delete** asks for confirmation and moves it to Trash. Deleting a message
-already in Trash asks for confirmation before permanently removing it.
+Select several messages with **Ctrl-click** to add/remove individual messages
+or **Shift-click** to select a range from the last selection anchor. **Shift+Up/Down**
+extends or shrinks that range; Shift+Home/End extends it to the folder's ends.
+**Ctrl+A**, while the message list is focused, selects all messages currently
+shown by the search. **Escape** clears selection. Selected rows are highlighted
+and the list shows the selection count. Search keeps selected messages that
+remain visible and drops hidden messages; changing folders/accounts or reloading
+clears selection.
+
+**Archive** moves all selected messages into the existing configured archive folder.
+**Read / unread** marks the whole selection read if any selected message is
+unread; otherwise it marks the selection unread. The context menu also offers
+explicit **Mark as read** and **Mark as unread** actions.
+**Delete** asks once for confirmation, showing the message count, and moves
+the selected messages to Trash. Deleting a selection already in Trash asks
+once before permanently removing it. Cancel leaves the messages untouched.
+If the view or selection changes while confirmation is open, it is cancelled.
+Operations continue if one message fails and report the failures; successful
+changes are retained.
 Press **Delete** or **Backspace** with the message list focused to open the same confirmation.
 The numpad **. / Del** key also opens confirmation in the message list, with
 Num Lock on or off. In text fields it keeps its normal editing behavior.
@@ -23,7 +40,9 @@ that window, and choose **Copy report**. The report includes the app version,
 received key name and scan code, expected keypad Delete scan code, and whether
 it matches. The diagnostic window does not perform mail actions.
 Right-click an email for reply/reply all, forward, mark read/unread, archive,
-delete and source actions. The menu selects the clicked email. Reply actions
+delete and source actions. Right-clicking within the selection preserves the
+group; right-clicking outside it selects just that message. Reply, forward and
+source menu actions require a single selection. Reply actions
 become available after its preview loads; message changes briefly disable
 conflicting actions. A reload or different selection closes the menu.
 Sync with your configured tool to propagate local changes.
@@ -86,6 +105,11 @@ leaves its list empty. It is safe to use mail without contacts or calendars.
 | Main window | F5 | Sync |
 | Message list | Delete / Backspace / numpad . / Del | Confirm deleting selected mail |
 | Message list | Up / Down / Home / End | Select a message |
+| Message list | Ctrl-click | Add/remove a message from selection |
+| Message list | Shift-click / Shift+Up/Down/Home/End | Select a range |
+| Message list | Ctrl+A | Select all currently shown messages |
+| Message list | Ctrl+Space | Toggle the active message's selection |
+| Message list | Escape | Clear selection |
 | Compose | Ctrl+S | Save local draft |
 | Compose | Ctrl+Enter | Confirm sending |
 | Editable fields | Ctrl+A/C/X/V | Select, copy, cut, paste |

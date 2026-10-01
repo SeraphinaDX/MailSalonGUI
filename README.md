@@ -1,7 +1,7 @@
 # MailSalonGUI
 
 A standalone desktop version of MailSalon, written in **Go and Fyne**.
-Version **0.1.6**. Its codebase, executable and configuration path are independent
+Version **0.1.7**. Its codebase, executable and configuration path are independent
 of the terminal client. It reads the same local Maildirs and contact/calendar
 files and supports MailSalon's TOML account settings.
 
@@ -123,7 +123,8 @@ and [Usage](docs/usage.md) for everyday workflows.
 - Local Maildir and Maildir++ discovery, including container-style INBOX layouts.
 - Plain text messages; HTML-only mail converted to text without fetching remote images.
 - Sender/subject search, read/unread state, archive and two-stage Trash deletion.
-- Delete-key handling in the message list and right-click message actions.
+- Multiple message selection with Ctrl-click, Shift-click and Ctrl+A.
+- Bulk read/unread, archive and confirmed deletion from the toolbar, keyboard and context menu.
 - Separate compose windows with From, To, Cc, Bcc, signatures and attachments.
 - Reply, reply all, Reply-To handling, threading headers and forward attachments.
 - Automatic reply identity selection and a contact picker for recipient fields.

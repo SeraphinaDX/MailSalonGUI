@@ -16,6 +16,18 @@ folder, account or search invalidates pending results. A late parse completion
 cannot replace a newer selection or mark an unrelated message read. An entry is
 marked read only after the current selection has parsed successfully.
 
+`messageList` owns a separate set of selected row IDs; Fyne's embedded List
+tracks the active row for scrolling. Row highlights and bulk targets use that
+set. Selection changes increment a revision so an open confirmation or queued
+action cannot follow a different selection. Filtering remaps selected paths
+onto visible rows, and folder/account reloads clear selection.
+
+Bulk operations capture immutable entries on the event goroutine, wait for any
+automatic mark-read rename, then run sequentially in one worker. Explicit flag
+changes invalidate pending parses so they cannot undo mark-unread. Flag changes
+update renamed paths in both list models; moves and partial failures reload
+the Maildir. Each failed message is reported without undoing successful work.
+
 Synchronization is sequential across distinct receive command lines, with a
 single in-progress flag. This prevents duplicate invocations when multiple
 accounts share `MailSalonSync -plain sync`. The timer uses the same entry point

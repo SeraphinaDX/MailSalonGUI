@@ -27,7 +27,7 @@ import (
 	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
 )
 
-const Version = "0.1.6"
+const Version = "0.1.7"
 
 type App struct {
 	Fyne                               fyne.App
@@ -104,10 +104,14 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 	}, func(id int, o fyne.CanvasObject) {
 		row := o.(*messageRow)
 		row.id = -1
+		row.selected = false
 		if id < 0 || id >= len(a.messages) {
+			row.Refresh()
 			return
 		}
 		row.id = id
+		row.selected = a.messageList.selection[id]
+		row.Refresh()
 		e := a.messages[id]
 		row.subject.TextStyle = fyne.TextStyle{Bold: e.Unread}
 		text := e.Subject
@@ -121,6 +125,18 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 		row.meta.SetText(e.From + "  ·  " + e.Date.Format("Jan 02 15:04"))
 	}, a.deleteMessage)
 	a.messageList.onSelected = a.openMessage
+	a.messageList.onShortcut = func(shortcut fyne.Shortcut) {
+		if canvas, ok := a.Window.Canvas().(fyne.Shortcutable); ok {
+			canvas.TypedShortcut(shortcut)
+		}
+	}
+	a.messageList.onSelectionChanged = func() {
+		a.hideMessageMenu()
+		a.updateSummary()
+		if len(a.messageList.selection) == 0 {
+			a.clearPreview()
+		}
+	}
 	readActions := container.NewHBox(
 		widget.NewButtonWithIcon("Reply", theme.MailReplyIcon(), func() { a.reply(false, false) }),
 		widget.NewButton("Reply all", func() { a.reply(false, true) }),
@@ -302,6 +318,10 @@ func (a *App) loadFolder(folder maildir.Folder) {
 	}()
 }
 func (a *App) filterMessages() {
+	selectedPaths := map[string]bool{}
+	for _, e := range a.selectedEntries() {
+		selectedPaths[e.Path] = true
+	}
 	oldPath := ""
 	if a.selected >= 0 && a.selected < len(a.messages) {
 		oldPath = a.messages[a.selected].Path
@@ -316,22 +336,24 @@ func (a *App) filterMessages() {
 	a.messageList.UnselectAll()
 	a.clearPreview()
 	a.messageList.Refresh()
-	unread := 0
-	for _, e := range a.all {
-		if e.Unread {
-			unread++
+	a.updateSummary()
+	active := -1
+	for i, e := range a.messages {
+		if selectedPaths[e.Path] {
+			a.messageList.selection[i] = true
+			if active < 0 || e.Path == oldPath {
+				active = i
+			}
 		}
 	}
-	a.summary.SetText(fmt.Sprintf("%d messages · %d unread · %d shown", len(a.all), unread, len(a.messages)))
-	for i, e := range a.messages {
-		if oldPath != "" && e.Path == oldPath {
-			a.messageList.Select(i)
-			break
-		}
+	if active >= 0 {
+		a.messageList.anchor = active
+		a.messageList.focusSelection(active)
 	}
 }
-func (a *App) openMessage(id int) {
-	if id < 0 || id >= len(a.messages) || a.changing {
+func (a *App) openMessage(id int) { a.loadMessage(id, true) }
+func (a *App) loadMessage(id int, autoRead bool) {
+	if id < 0 || id >= len(a.messages) || (a.changing && !a.changingRead) {
 		return
 	}
 	a.hideMessageMenu()
@@ -377,7 +399,7 @@ func (a *App) openMessage(id int) {
 				att := attachment
 				a.attachments.Add(widget.NewButtonWithIcon(fmt.Sprintf("Save %s (%d bytes)", att.Filename, len(att.Data)), theme.DownloadIcon(), func() { a.saveAttachment(att, acc.DownloadDir) }))
 			}
-			if e.Unread {
+			if autoRead && e.Unread && len(a.messageList.selection) == 1 && a.messageList.selection[id] {
 				a.changeRead(e, true)
 			}
 			a.updateMessageMenu()
@@ -424,13 +446,7 @@ func (a *App) changeRead(e maildir.Entry, read bool) {
 				}
 			}
 			a.messageList.Refresh()
-			unread := 0
-			for _, x := range a.all {
-				if x.Unread {
-					unread++
-				}
-			}
-			a.summary.SetText(fmt.Sprintf("%d messages · %d unread · %d shown", len(a.all), unread, len(a.messages)))
+			a.updateSummary()
 			if pending != nil {
 				pending()
 			}
@@ -442,99 +458,6 @@ func (a *App) currentEntry() (maildir.Entry, bool) {
 		return maildir.Entry{}, false
 	}
 	return a.messages[a.selected], true
-}
-func (a *App) toggleRead() {
-	if e, ok := a.currentEntry(); ok {
-		a.changeRead(e, e.Unread)
-	}
-}
-func (a *App) archive() {
-	e, ok := a.currentEntry()
-	if !ok {
-		return
-	}
-	acc := a.cfg.Accounts[a.account]
-	folder, ok := maildir.FindFolder(a.folders, acc.ArchiveFolder)
-	if !ok {
-		a.fail(fmt.Errorf("create/sync the %s Maildir first", acc.ArchiveFolder))
-		return
-	}
-	a.mutateMessage(e, func() error { return maildir.Archive(e, folder) })
-}
-func (a *App) deleteMessage() {
-	gen, reading, id := a.generation, a.reading, a.selected
-	a.afterReadChange(func() {
-		if gen == a.generation && reading == a.reading && id == a.selected && id == a.messageList.selectedID {
-			a.confirmDeleteMessage()
-		}
-	})
-}
-
-// Reading unread mail renames it from new/ to cur/. Preserve a Delete request
-// during that operation, then resolve the current path after the rename.
-func (a *App) afterReadChange(fn func()) {
-	if a.changingRead {
-		a.pendingDelete = fn
-		return
-	}
-	fn()
-}
-
-func (a *App) confirmDeleteMessage() {
-	e, ok := a.currentEntry()
-	if !ok {
-		return
-	}
-	acc := a.cfg.Accounts[a.account]
-	trash, found := maildir.FindFolder(a.folders, acc.TrashFolder)
-	if !found {
-		if strings.ContainsAny(acc.TrashFolder, "/\\") || acc.TrashFolder == ".." {
-			a.fail(fmt.Errorf("trash folder needs a simple name"))
-			return
-		}
-		trash = maildir.Folder{Name: acc.TrashFolder, Path: filepath.Join(acc.Maildir, acc.TrashFolder)}
-	}
-	text := "Move this message to Trash?"
-	if filepath.Clean(filepath.Dir(filepath.Dir(e.Path))) == filepath.Clean(trash.Path) {
-		text = "Permanently delete this message from Trash?"
-	}
-	gen, reading, id := a.generation, a.reading, a.selected
-	dialog.ShowConfirm("Delete message", text, func(yes bool) {
-		if !yes {
-			return
-		}
-		a.afterReadChange(func() {
-			if gen != a.generation || reading != a.reading || id != a.selected || id != a.messageList.selectedID {
-				return
-			}
-			// The preview may rename the mail while confirmation is open.
-			current, ok := a.currentEntry()
-			if !ok {
-				return
-			}
-			a.mutateMessage(current, func() error { return maildir.Delete(current, trash) })
-		})
-	}, a.Window)
-}
-func (a *App) mutateMessage(e maildir.Entry, fn func() error) {
-	if a.changing {
-		return
-	}
-	a.changing = true
-	gen := a.generation
-	go func() {
-		err := fn()
-		a.post(func() {
-			a.changing = false
-			if err != nil {
-				a.fail(err)
-				return
-			}
-			if gen == a.generation {
-				a.reload()
-			}
-		})
-	}()
 }
 func (a *App) reply(forward, all bool) {
 	if a.parsed == nil {
