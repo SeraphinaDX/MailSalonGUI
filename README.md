@@ -1,9 +1,19 @@
-# MailSalonGUI
+# MailSalon and MailSalonGUI
 
-A standalone desktop version of MailSalon, written in **Go and Fyne**.
-Version **0.2.1**. Its codebase, executable and configuration path are independent
-of the terminal client. It reads the same local Maildirs and contact/calendar
-files and supports MailSalon's TOML account settings.
+One Go codebase with two interfaces: **MailSalon**, the gotui terminal client
+(version **0.9.0**), and **MailSalonGUI**, the Fyne desktop client (version **0.3.0**).
+Both use the same Maildir, MIME, TOML, transport, OpenPGP and contacts/calendar
+packages. Each retains its own executable, configuration path and interface.
+
+```sh
+make build-tui   # MailSalon; pure Go, no graphics dependencies
+make build-gui   # MailSalonGUI; needs the desktop dependencies below
+make build-all   # Both executables
+```
+
+`make build` continues to build the GUI. Terminal setup and controls are in
+[the terminal guide](docs/terminal/README.md); repository/config migration is
+explained in [Consolidation](docs/consolidation.md).
 
 ![MailSalonGUI mail view](docs/screenshots/mail.png)
 
@@ -117,7 +127,7 @@ checked on Linux; Windows/macOS native builds have not been validated.
 See [Configuration](docs/configuration.md) for accounts, collections and themes,
 and [Usage](docs/usage.md) for everyday workflows.
 
-## Features
+## Desktop features
 
 - Resizable folder, message and preview panes; multiple account selector.
 - Local Maildir and Maildir++ discovery, including container-style INBOX layouts.
@@ -161,18 +171,25 @@ sender and subject; contact suggestions use the picker rather than inline
 completion. Terminal `[keybindings]` settings are accepted for config
 compatibility; GUI shortcuts are fixed as documented.
 
+The terminal client retains its keyboard/mouse controls, inline contact
+completion, OpenPGP, invitation import and month/week/day/agenda calendar views.
+Its import chooser can convert supported simple invitations to JMAP; complex
+invitations require CalDAV to retain their source. Interface features can differ
+while the underlying parser, recurrence engine and storage operations are shared.
+
 ## Checks
 
 ```sh
 make test
 make check
+make test-tui  # Core and terminal tests with CGO_ENABLED=0
 # Optional real GnuPG integration test, on a host that supports gpg-agent sockets:
 MAILSALONGUI_TEST_GPG=1 go test ./internal/pgp
 ```
 
 The normal tests use Fyne's software driver (`-tags ci`), so no display is needed.
 They cover Maildir mutations, MIME and attachments, recipient handling, configs,
-drafts, empty GUI views, stale worker results and collection formats.
+drafts, both interfaces, stale worker results and collection formats.
 The real GnuPG round trip is opt-in because some sandboxed environments forbid
 its agent sockets. No live mail accounts are contacted by the tests.
 

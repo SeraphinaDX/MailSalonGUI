@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+package uiapp
+
+import (
+	"testing"
+
+	ui "github.com/metaspartan/gotui/v5"
+
+	"github.com/SeraphinaDX/MailSalonGUI/internal/config"
+)
+
+func TestComposeBodyTabStaysInBody(t *testing.T) {
+	a := &App{
+		cfg: config.Config{
+			Accounts: []config.Account{{Name: "test", From: "test@example.com"}},
+			Keybindings: config.Keybindings{
+				NextField:     "Tab",
+				PreviousField: "Shift+Tab",
+			},
+		},
+	}
+	a.startCompose(nil, false)
+	a.compose.field = composeBody
+
+	for _, id := range []string{"a", "<Tab>", "b"} {
+		a.handleComposeEvent(ui.Event{Type: ui.KeyboardEvent, ID: id})
+	}
+
+	if a.compose.field != composeBody {
+		t.Fatalf("compose field = %v, want Body", a.compose.field)
+	}
+	if got, want := a.compose.body.Text, "a    b"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+	if a.compose.to.Text != "" || a.compose.cc.Text != "" || a.compose.bcc.Text != "" || a.compose.subject.Text != "" {
+		t.Fatalf("body input leaked into header fields: to=%q cc=%q bcc=%q subject=%q", a.compose.to.Text, a.compose.cc.Text, a.compose.bcc.Text, a.compose.subject.Text)
+	}
+}
+
+func TestComposeBodyShiftTabStillLeavesBody(t *testing.T) {
+	a := &App{
+		cfg: config.Config{
+			Accounts: []config.Account{{Name: "test", From: "test@example.com"}},
+			Keybindings: config.Keybindings{
+				NextField:     "Tab",
+				PreviousField: "Shift+Tab",
+			},
+		},
+	}
+	a.startCompose(nil, false)
+	a.compose.field = composeBody
+
+	a.handleComposeEvent(ui.Event{Type: ui.KeyboardEvent, ID: "<Backtab>"})
+
+	if a.compose.field != composeSubject {
+		t.Fatalf("compose field = %v, want Subject", a.compose.field)
+	}
+}
+
+func TestComposeAcceptsAngleBrackets(t *testing.T) {
+	a := &App{
+		cfg: config.Config{
+			Accounts: []config.Account{{Name: "test", From: "test@example.com"}},
+		},
+	}
+	a.startCompose(nil, false)
+
+	a.compose.field = composeSubject
+	for _, id := range []string{"a", "<", "b", ">", "c"} {
+		a.handleComposeEvent(ui.Event{Type: ui.KeyboardEvent, ID: id})
+	}
+	if got, want := a.compose.subject.Text, "a<b>c"; got != want {
+		t.Fatalf("subject = %q, want %q", got, want)
+	}
+
+	a.compose.field = composeBody
+	for _, id := range []string{"x", "<", "y", ">", "z"} {
+		a.handleComposeEvent(ui.Event{Type: ui.KeyboardEvent, ID: id})
+	}
+	if got, want := a.compose.body.Text, "x<y>z"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
+	}
+}

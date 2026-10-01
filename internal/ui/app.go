@@ -1,0 +1,2392 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+package uiapp
+
+import (
+	"context"
+	"fmt"
+	"image"
+	"net/mail"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	ui "github.com/metaspartan/gotui/v5"
+	"github.com/metaspartan/gotui/v5/widgets"
+
+	"github.com/SeraphinaDX/MailSalonGUI/internal/config"
+	"github.com/SeraphinaDX/MailSalonGUI/internal/maildir"
+	"github.com/SeraphinaDX/MailSalonGUI/internal/mimeutil"
+	"github.com/SeraphinaDX/MailSalonGUI/internal/pgp"
+	"github.com/SeraphinaDX/MailSalonGUI/internal/pim"
+	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
+)
+
+type focus int
+
+const (
+	focusFolders focus = iota
+	focusMessages
+	focusPreview
+)
+
+type composeField int
+
+const (
+	composeFrom composeField = iota
+	composeTo
+	composeCc
+	composeBcc
+	composeSubject
+	composeBody
+)
+
+type composeState struct {
+	from               *widgets.Paragraph
+	to                 *textInput
+	cc                 *textInput
+	bcc                *textInput
+	subject            *textInput
+	body               *textArea
+	field              composeField
+	attachments        []string
+	forwardAttachments []mimeutil.Attachment
+	inReplyTo          string
+	references         string
+	account            int
+	isReply            bool
+	isForward          bool
+	pgpSign            bool
+	pgpEncrypt         bool
+
+	attachPrompt *textInput
+	completion   recipientCompletion
+}
+
+type resolvedTheme struct {
+	background   ui.Color
+	foreground   ui.Color
+	muted        ui.Color
+	border       ui.Color
+	activeBorder ui.Color
+	title        ui.Color
+	selectedFG   ui.Color
+	selectedBG   ui.Color
+	account      ui.Color
+	unread       ui.Color
+	status       ui.Color
+	error        ui.Color
+	cursorFG     ui.Color
+	cursorBG     ui.Color
+}
+
+type App struct {
+	view           int // 0 mail, 1 contacts, 2 calendar
+	pimCollections []config.Collection
+	pimCollection  int
+	pimItems       []pim.Item
+	pimAllItems    []pim.Item
+	pimSelected    int
+	pimOffset      int
+	pimQuery       string
+	pimEditor      *pimEditor
+	calendarViews  *calendarViews
+	calendarDialog *calendarDialog
+	calendarButton *widgets.Paragraph
+	cfg            config.Config
+	theme          resolvedTheme
+	account        int
+
+	folders     []maildir.Folder
+	allMessages []maildir.Entry
+	messages    []maildir.Entry
+	parsed      *mimeutil.ParsedMessage
+	security    pgp.Info
+
+	selectedFolder  int
+	selectedMessage int
+	folderOffset    int
+	messageOffset   int
+	previewScroll   int
+	focus           focus
+	status          string
+	deleteArmed     bool
+	searchActive    bool
+	searchQuery     string
+	autoSyncing     bool
+
+	accountBar   *widgets.Paragraph
+	viewTabs     [3]*widgets.Paragraph
+	updateBar    *widgets.Paragraph
+	folderList   *widgets.List
+	messageTbl   *widgets.Table
+	preview      *widgets.Paragraph
+	footer       *widgets.Paragraph
+	searchPrompt *textInput
+
+	compose *composeState
+}
+
+func New(cfg config.Config) (*App, error) {
+	if len(cfg.Accounts) == 0 {
+		return nil, fmt.Errorf("no accounts configured")
+	}
+	for _, account := range cfg.Accounts {
+		if err := maildir.PrepareRoot(account.Maildir); err != nil {
+			return nil, fmt.Errorf("prepare maildir for %s: %w", account.Name, err)
+		}
+	}
+
+	theme, err := resolveTheme(themeWithDefaults(cfg.Theme))
+	if err != nil {
+		return nil, err
+	}
+
+	a := &App{
+		cfg:             cfg,
+		theme:           theme,
+		account:         cfg.DefaultAccountIndex(),
+		selectedFolder:  0,
+		selectedMessage: 0,
+		focus:           focusMessages,
+		status:          "Ready",
+	}
+	a.accountBar = widgets.NewParagraph()
+	a.accountBar.Title = "Account"
+	a.accountBar.WrapText = false
+	a.accountBar.BorderRounded = true
+
+	a.updateBar = widgets.NewParagraph()
+	a.updateBar.Title = "Update Mail"
+	a.updateBar.WrapText = false
+	a.updateBar.BorderRounded = true
+	a.updateBar.Text = "↻ Update"
+	a.updateBar.TitleBottom = "u/Click update"
+
+	a.folderList = widgets.NewList()
+	a.folderList.Title = "Folders"
+	a.folderList.WrapText = false
+	a.folderList.BorderRounded = true
+
+	a.messageTbl = widgets.NewTable()
+	a.messageTbl.Title = "Messages"
+	a.messageTbl.RowSeparator = false
+	a.messageTbl.FillRow = true
+	a.messageTbl.TextWrap = false
+	a.messageTbl.ShowCursor = true
+
+	a.preview = widgets.NewParagraph()
+	a.preview.Title = "Message"
+	a.preview.WrapText = false
+	a.preview.BorderRounded = true
+
+	a.footer = widgets.NewParagraph()
+	a.footer.Border = false
+	a.footer.WrapText = false
+
+	a.searchPrompt = newTextInput()
+	a.searchPrompt.Title = "Search current folder"
+	a.searchPrompt.TitleBottom = "Enter apply  Esc cancel  Alt+A all  Shift+arrows select"
+	a.searchPrompt.BorderRounded = true
+
+	a.applyStyles()
+	if err := a.refreshFolders(); err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+func (a *App) Run() error {
+	a.render()
+	if a.cfg.StartupSync && strings.TrimSpace(a.currentAccount().ReceiveCommand) != "" {
+		a.runSync()
+		a.render()
+	}
+
+	events := ui.PollEvents()
+	autoSyncDone := make(chan periodicSyncResult, 1)
+
+	var ticker *time.Ticker
+	var syncTick <-chan time.Time
+	if a.cfg.SyncInterval > 0 && len(periodicReceiveCommands(a.cfg.Accounts)) > 0 {
+		ticker = time.NewTicker(a.cfg.SyncInterval)
+		defer ticker.Stop()
+		syncTick = ticker.C
+	}
+
+	for {
+		select {
+		case e, ok := <-events:
+			if !ok {
+				return nil
+			}
+			if e.Type == ui.ResizeEvent {
+				a.render()
+				continue
+			}
+			if a.calendarDialog != nil {
+				if a.handleCalendarImport(e) {
+					return nil
+				}
+				a.render()
+				continue
+			}
+			if a.compose != nil {
+				if a.handleComposeEvent(e) {
+					return nil
+				}
+				a.render()
+				continue
+			}
+			if a.searchActive {
+				if a.handleSearchEvent(e) {
+					return nil
+				}
+				a.render()
+				continue
+			}
+			if a.pimEditor != nil {
+				if a.handlePIMEditor(e) {
+					return nil
+				}
+				a.render()
+				continue
+			}
+			if e.Type == ui.MouseEvent {
+				if a.view != 0 {
+					a.handlePIMMouse(e)
+				} else {
+					a.handleMouse(e)
+				}
+				a.render()
+				continue
+			}
+			if e.Type != ui.KeyboardEvent {
+				continue
+			}
+			if a.handleKey(e.ID) {
+				return nil
+			}
+			a.render()
+
+		case <-syncTick:
+			if a.autoSyncing {
+				continue
+			}
+			a.autoSyncing = true
+			a.status = "Auto-syncing mail..."
+			a.render()
+			go a.runPeriodicSync(autoSyncDone)
+
+		case result := <-autoSyncDone:
+			a.autoSyncing = false
+			if err := a.refreshFolders(); err != nil {
+				a.setError(err)
+			} else if len(result.failures) > 0 {
+				a.status = fmt.Sprintf("Automatic sync finished with %d failure(s): %s", len(result.failures), strings.Join(result.failures, "; "))
+			} else {
+				a.status = fmt.Sprintf("Automatic sync complete (%d receive command(s))", result.commands)
+			}
+			if a.view != 0 {
+				if err := a.loadPIM(); err != nil {
+					a.setError(err)
+				}
+			}
+			a.render()
+		}
+	}
+}
+
+type periodicSyncResult struct {
+	commands int
+	failures []string
+}
+
+func periodicReceiveCommands(accounts []config.Account) []string {
+	seen := make(map[string]bool)
+	commands := make([]string, 0, len(accounts))
+	for _, account := range accounts {
+		command := strings.TrimSpace(account.ReceiveCommand)
+		if command == "" || seen[command] {
+			continue
+		}
+		seen[command] = true
+		commands = append(commands, command)
+	}
+	return commands
+}
+
+func (a *App) runPeriodicSync(done chan<- periodicSyncResult) {
+	commands := periodicReceiveCommands(a.cfg.Accounts)
+	result := periodicSyncResult{commands: len(commands)}
+	for _, command := range commands {
+		output, err := transport.Receive(context.Background(), command)
+		if err != nil {
+			result.failures = append(result.failures, commandError("receive command failed", output, err))
+		}
+	}
+	done <- result
+}
+
+func (a *App) applyStyles() {
+	selected := ui.NewStyle(a.theme.selectedFG, a.theme.selectedBG)
+	border := ui.NewStyle(a.theme.border, a.theme.background)
+	title := ui.NewStyle(a.theme.title, a.theme.background)
+	text := ui.NewStyle(a.theme.foreground, a.theme.background)
+	muted := ui.NewStyle(a.theme.muted, a.theme.background)
+
+	for _, block := range []*ui.Block{
+		&a.accountBar.Block,
+		&a.updateBar.Block,
+		&a.folderList.Block,
+		&a.messageTbl.Block,
+		&a.preview.Block,
+		&a.footer.Block,
+		&a.searchPrompt.Block,
+	} {
+		block.BackgroundColor = a.theme.background
+		block.BorderStyle = border
+		block.TitleStyle = title
+		block.TitleBottomStyle = muted
+	}
+
+	a.accountBar.BorderStyle = ui.NewStyle(a.theme.title, a.theme.background)
+	a.accountBar.TextStyle = ui.NewStyle(a.theme.account, a.theme.background)
+	a.updateBar.BorderStyle = ui.NewStyle(a.theme.status, a.theme.background)
+	a.updateBar.TextStyle = ui.NewStyle(a.theme.status, a.theme.background)
+
+	a.folderList.TextStyle = text
+	a.folderList.SelectedStyle = selected
+
+	a.messageTbl.TextStyle = text
+	a.messageTbl.SelectedRowStyle = selected
+	a.messageTbl.CursorColor = a.theme.selectedBG
+
+	a.preview.TextStyle = text
+	a.footer.TextStyle = ui.NewStyle(a.theme.status, a.theme.background)
+	a.searchPrompt.TextStyle = text
+	a.searchPrompt.CursorStyle = ui.NewStyle(a.theme.cursorFG, a.theme.cursorBG)
+	a.searchPrompt.SelectionStyle = ui.NewStyle(a.theme.selectedFG, a.theme.selectedBG)
+}
+
+func (a *App) refreshFolders() error {
+	folders, err := maildir.DiscoverFolders(a.currentAccount().Maildir)
+	if err != nil {
+		return fmt.Errorf("discover folders: %w", err)
+	}
+	a.folders = folders
+	if len(a.folders) == 0 {
+		a.allMessages = nil
+		a.messages = nil
+		a.parsed = nil
+		a.security = pgp.Info{}
+		a.searchQuery = ""
+		return nil
+	}
+	if a.selectedFolder >= len(a.folders) {
+		a.selectedFolder = len(a.folders) - 1
+	}
+	if a.selectedFolder < 0 {
+		a.selectedFolder = 0
+	}
+	return a.loadFolder(a.selectedFolder)
+}
+
+func (a *App) loadFolder(index int) error {
+	if index < 0 || index >= len(a.folders) {
+		return nil
+	}
+	entries, err := maildir.Scan(a.folders[index])
+	if err != nil {
+		return err
+	}
+	a.selectedFolder = index
+	a.allMessages = append([]maildir.Entry(nil), entries...)
+	a.messages = append([]maildir.Entry(nil), entries...)
+	a.selectedMessage = 0
+	a.messageOffset = 0
+	a.previewScroll = 0
+	a.parsed = nil
+	a.security = pgp.Info{}
+	a.searchQuery = ""
+	if len(a.messages) > 0 {
+		_ = a.openMessage(0)
+	}
+	return nil
+}
+
+func (a *App) openMessage(index int) error {
+	if index < 0 || index >= len(a.messages) {
+		a.parsed = nil
+		return nil
+	}
+	a.selectedMessage = index
+	oldPath := a.messages[index].Path
+	raw, err := os.ReadFile(a.messages[index].Path)
+	if err != nil {
+		return err
+	}
+	processed, security := pgp.ProcessIncoming(context.Background(), raw, pgpSettings(a.currentAccount()))
+	p, err := mimeutil.ParseBytes(processed)
+	if err != nil {
+		return err
+	}
+	if security.Encrypted && !security.Decrypted && strings.TrimSpace(security.Error) != "" {
+		p.Body = "This message is OpenPGP encrypted, but MailSalon could not decrypt it.\n\n" + security.Error
+	}
+	if err := maildir.MarkRead(&a.messages[index]); err != nil {
+		return err
+	}
+	a.syncMasterEntry(oldPath, a.messages[index])
+	a.parsed = p
+	a.security = security
+	a.previewScroll = 0
+	return nil
+}
+
+func (a *App) handleKey(id string) bool {
+	keys := a.bindings()
+	if bindingMatches(id, keys.MailView) {
+		a.setView(0)
+		return false
+	}
+	if bindingMatches(id, keys.ContactsView) {
+		a.setView(1)
+		return false
+	}
+	if bindingMatches(id, keys.CalendarView) {
+		a.setView(2)
+		return false
+	}
+	if a.view != 0 {
+		return a.handlePIMKey(id)
+	}
+	if !bindingMatches(id, keys.Delete) {
+		a.deleteArmed = false
+	}
+
+	if id == "<C-c>" || bindingMatches(id, keys.Quit) {
+		return true
+	}
+	if bindingMatches(id, keys.FocusNext) {
+		a.focus = (a.focus + 1) % 3
+		return false
+	}
+	if id == "<Left>" || bindingMatches(id, keys.FocusLeft) {
+		if a.focus != focusFolders {
+			a.focus = focusFolders
+		}
+		return false
+	}
+	if id == "<Right>" || bindingMatches(id, keys.FocusRight) {
+		if a.focus == focusFolders {
+			a.focus = focusMessages
+		} else if a.focus == focusMessages {
+			a.focus = focusPreview
+		}
+		return false
+	}
+	if id == "<Up>" || bindingMatches(id, keys.MoveUp) {
+		a.moveSelection(-1)
+		return false
+	}
+	if id == "<Down>" || bindingMatches(id, keys.MoveDown) {
+		a.moveSelection(1)
+		return false
+	}
+	if bindingMatches(id, keys.PageUp) {
+		a.page(-1)
+		return false
+	}
+	if bindingMatches(id, keys.PageDown) {
+		a.page(1)
+		return false
+	}
+	if bindingMatches(id, keys.Home) {
+		a.homeEnd(false)
+		return false
+	}
+	if bindingMatches(id, keys.End) {
+		a.homeEnd(true)
+		return false
+	}
+	if bindingMatches(id, keys.Open) {
+		if a.focus == focusFolders {
+			if err := a.loadFolder(a.selectedFolder); err != nil {
+				a.setError(err)
+			} else {
+				a.focus = focusMessages
+			}
+		} else if a.focus == focusMessages {
+			if err := a.openMessage(a.selectedMessage); err != nil {
+				a.setError(err)
+			} else {
+				a.focus = focusPreview
+			}
+		}
+		return false
+	}
+	if bindingMatches(id, keys.SwitchAccount) {
+		a.switchAccount(1)
+		return false
+	}
+	if bindingMatches(id, keys.Compose) {
+		a.startCompose(nil, false)
+		return false
+	}
+	if bindingMatches(id, keys.Search) {
+		a.startSearch()
+		return false
+	}
+	if bindingMatches(id, keys.ToggleRead) {
+		a.toggleSelectedRead()
+		return false
+	}
+	if bindingMatches(id, keys.Reply) {
+		if a.parsed == nil {
+			a.status = "No message selected"
+		} else {
+			a.startCompose(a.parsed, false)
+		}
+		return false
+	}
+	if bindingMatches(id, keys.Forward) {
+		if a.parsed == nil {
+			a.status = "No message selected"
+		} else {
+			a.startCompose(a.parsed, true)
+		}
+		return false
+	}
+	if bindingMatches(id, keys.Archive) {
+		a.archiveSelected()
+		return false
+	}
+	if bindingMatches(id, keys.Delete) {
+		if !a.deleteArmed {
+			a.deleteArmed = true
+			a.status = fmt.Sprintf("Press %s again to delete the selected message", keyLabel(keys.Delete))
+		} else {
+			a.deleteSelected()
+			a.deleteArmed = false
+		}
+		return false
+	}
+	if bindingMatches(id, keys.ImportCalendar) {
+		a.startCalendarImport()
+		return false
+	}
+	if bindingMatches(id, keys.SaveAttachments) {
+		a.saveAttachments()
+		return false
+	}
+	if bindingMatches(id, keys.Sync) {
+		a.runSync()
+		return false
+	}
+	if bindingMatches(id, keys.Refresh) {
+		if err := a.refreshFolders(); err != nil {
+			a.setError(err)
+		} else {
+			a.status = "Maildir refreshed"
+		}
+		return false
+	}
+	return false
+}
+
+func (a *App) bindings() config.Keybindings {
+	return config.KeybindingsWithDefaults(a.cfg.Keybindings)
+}
+
+func bindingMatches(eventID, binding string) bool {
+	return eventID == bindingEventID(binding)
+}
+
+func bindingEventID(binding string) string {
+	binding = strings.TrimSpace(binding)
+	if binding == "" {
+		return ""
+	}
+	if utf8.RuneCountInString(binding) == 1 {
+		return binding
+	}
+	if strings.HasPrefix(binding, "<") && strings.HasSuffix(binding, ">") {
+		return binding
+	}
+	lower := strings.ToLower(binding)
+	if strings.HasPrefix(lower, "ctrl+") {
+		key := strings.TrimSpace(binding[len("Ctrl+"):])
+		if utf8.RuneCountInString(key) == 1 {
+			return "<C-" + strings.ToLower(key) + ">"
+		}
+	}
+	switch lower {
+	case "esc", "escape":
+		return "<Escape>"
+	case "tab":
+		return "<Tab>"
+	case "shift+tab", "backtab":
+		return "<Backtab>"
+	case "enter", "return":
+		return "<Enter>"
+	case "pgup", "pageup", "page up":
+		return "<PageUp>"
+	case "pgdn", "pagedown", "page down":
+		return "<PageDown>"
+	case "home":
+		return "<Home>"
+	case "end":
+		return "<End>"
+	case "left":
+		return "<Left>"
+	case "right":
+		return "<Right>"
+	case "up":
+		return "<Up>"
+	case "down":
+		return "<Down>"
+	case "space":
+		return " "
+	}
+	return binding
+}
+
+func keyLabel(binding string) string {
+	binding = strings.TrimSpace(binding)
+	if binding == "" {
+		return "?"
+	}
+	if strings.HasPrefix(binding, "<") && strings.HasSuffix(binding, ">") {
+		inner := strings.TrimSuffix(strings.TrimPrefix(binding, "<"), ">")
+		if strings.HasPrefix(inner, "C-") {
+			return "Ctrl+" + strings.TrimPrefix(inner, "C-")
+		}
+		return inner
+	}
+	return binding
+}
+
+func (a *App) startSearch() {
+	a.searchActive = true
+	a.searchPrompt.Text = a.searchQuery
+	if a.view != 0 {
+		a.searchPrompt.Text = a.pimQuery
+		a.searchPrompt.Title = "Search contacts/calendar"
+	} else {
+		a.searchPrompt.Title = "Search current folder"
+	}
+	a.searchPrompt.Cursor = utf8.RuneCountInString(a.searchPrompt.Text)
+	a.searchPrompt.selection.reset()
+	a.status = "Search current folder"
+}
+
+func (a *App) handleSearchEvent(e ui.Event) bool {
+	if e.Type == ui.MouseEvent {
+		a.searchPrompt.mouse(e)
+		return false
+	}
+	e.ID = editorEventID(e)
+	if e.Type != ui.KeyboardEvent {
+		return false
+	}
+	switch e.ID {
+	case "<C-c>":
+		return true
+	case "<Escape>":
+		a.searchActive = false
+		a.status = "Search cancelled"
+	case "<Enter>":
+		query := strings.TrimSpace(a.searchPrompt.Text)
+		a.searchActive = false
+		a.applySearch(query)
+	default:
+		a.editInput(a.searchPrompt, e.ID)
+	}
+	return false
+}
+
+func (a *App) applySearch(query string) {
+	if a.view != 0 {
+		a.pimQuery = strings.TrimSpace(query)
+		a.filterPIM()
+		return
+	}
+	a.searchQuery = strings.TrimSpace(query)
+	a.selectedMessage = 0
+	a.messageOffset = 0
+	a.previewScroll = 0
+	a.parsed = nil
+	if a.searchQuery == "" {
+		a.messages = append([]maildir.Entry(nil), a.allMessages...)
+		a.status = "Search cleared"
+	} else {
+		matches := make([]maildir.Entry, 0)
+		for _, entry := range a.allMessages {
+			if a.messageMatchesSearch(entry, a.searchQuery) {
+				matches = append(matches, entry)
+			}
+		}
+		a.messages = matches
+		a.status = fmt.Sprintf("Search %q: %d match(es)", a.searchQuery, len(matches))
+	}
+	if len(a.messages) > 0 {
+		if err := a.openMessage(0); err != nil {
+			a.setError(err)
+		}
+	}
+}
+
+func messageMatchesSearch(entry maildir.Entry, query string) bool {
+	return messageMatchesSearchWithPGP(entry, query, pgp.Settings{})
+}
+
+func (a *App) messageMatchesSearch(entry maildir.Entry, query string) bool {
+	return messageMatchesSearchWithPGP(entry, query, pgpSettings(a.currentAccount()))
+}
+
+func messageMatchesSearchWithPGP(entry maildir.Entry, query string, settings pgp.Settings) bool {
+	needle := strings.ToLower(strings.TrimSpace(query))
+	if needle == "" {
+		return true
+	}
+	quick := strings.ToLower(strings.Join([]string{
+		entry.From,
+		entry.Subject,
+		entry.MessageID,
+		entry.Date.Format(time.RFC1123Z),
+	}, "\n"))
+	if strings.Contains(quick, needle) {
+		return true
+	}
+	raw, err := os.ReadFile(entry.Path)
+	if err != nil {
+		return false
+	}
+	processed, _ := pgp.ProcessIncoming(context.Background(), raw, settings)
+	p, err := mimeutil.ParseBytes(processed)
+	if err != nil {
+		return false
+	}
+	full := strings.ToLower(strings.Join([]string{
+		p.From, p.To, p.Cc, p.Subject, p.Date, p.MessageID, p.Body,
+	}, "\n"))
+	return strings.Contains(full, needle)
+}
+
+func (a *App) toggleSelectedRead() {
+	if len(a.messages) == 0 || a.selectedMessage < 0 || a.selectedMessage >= len(a.messages) {
+		a.status = "No message selected"
+		return
+	}
+	oldPath := a.messages[a.selectedMessage].Path
+	wasUnread := a.messages[a.selectedMessage].Unread
+	if err := maildir.ToggleRead(&a.messages[a.selectedMessage]); err != nil {
+		a.setError(err)
+		return
+	}
+	a.syncMasterEntry(oldPath, a.messages[a.selectedMessage])
+	if wasUnread {
+		a.status = "Message marked read"
+	} else {
+		a.status = "Message marked unread"
+	}
+}
+
+func (a *App) syncMasterEntry(oldPath string, updated maildir.Entry) {
+	for i := range a.allMessages {
+		if a.allMessages[i].Path == oldPath {
+			a.allMessages[i] = updated
+			return
+		}
+	}
+	if updated.MessageID == "" {
+		return
+	}
+	for i := range a.allMessages {
+		if a.allMessages[i].MessageID == updated.MessageID {
+			a.allMessages[i] = updated
+			return
+		}
+	}
+}
+
+func (a *App) moveSelection(delta int) {
+	switch a.focus {
+	case focusFolders:
+		if len(a.folders) == 0 {
+			return
+		}
+		a.selectedFolder = clamp(a.selectedFolder+delta, 0, len(a.folders)-1)
+	case focusMessages:
+		if len(a.messages) == 0 {
+			return
+		}
+		a.selectedMessage = clamp(a.selectedMessage+delta, 0, len(a.messages)-1)
+		if err := a.openMessage(a.selectedMessage); err != nil {
+			a.setError(err)
+		}
+	case focusPreview:
+		a.previewScroll = max(0, a.previewScroll+delta)
+	}
+}
+
+func (a *App) page(direction int) {
+	_, h := ui.TerminalDimensions()
+	step := max(3, h/3)
+	switch a.focus {
+	case focusFolders:
+		if len(a.folders) > 0 {
+			a.selectedFolder = clamp(a.selectedFolder+direction*step, 0, len(a.folders)-1)
+		}
+	case focusMessages:
+		if len(a.messages) > 0 {
+			a.selectedMessage = clamp(a.selectedMessage+direction*step, 0, len(a.messages)-1)
+			if err := a.openMessage(a.selectedMessage); err != nil {
+				a.setError(err)
+			}
+		}
+	case focusPreview:
+		a.previewScroll = max(0, a.previewScroll+direction*step)
+	}
+}
+
+func (a *App) homeEnd(end bool) {
+	switch a.focus {
+	case focusFolders:
+		if end {
+			a.selectedFolder = max(0, len(a.folders)-1)
+		} else {
+			a.selectedFolder = 0
+		}
+	case focusMessages:
+		if len(a.messages) == 0 {
+			return
+		}
+		if end {
+			a.selectedMessage = len(a.messages) - 1
+		} else {
+			a.selectedMessage = 0
+		}
+		if err := a.openMessage(a.selectedMessage); err != nil {
+			a.setError(err)
+		}
+	case focusPreview:
+		if end {
+			a.previewScroll = 1 << 20
+		} else {
+			a.previewScroll = 0
+		}
+	}
+}
+
+func (a *App) handleMouse(e ui.Event) {
+	if a.handleViewTabMouse(e) {
+		return
+	}
+	m, ok := e.Payload.(ui.Mouse)
+	if !ok {
+		return
+	}
+	p := image.Pt(m.X, m.Y)
+	if a.hasCalendarEvents() && a.calendarButton != nil && p.In(a.calendarButton.Rectangle) && (e.ID == "<MouseLeft>" || e.ID == "MouseLeft") {
+		a.startCalendarImport()
+		return
+	}
+	switch e.ID {
+	case "<MouseLeft>", "MouseLeft":
+		switch {
+		case p.In(a.accountBar.Rectangle):
+			a.switchAccount(1)
+		case p.In(a.updateBar.Rectangle):
+			a.runSync()
+		case p.In(a.folderList.Inner):
+			a.focus = focusFolders
+			row := p.Y - a.folderList.Inner.Min.Y
+			idx := a.folderOffset + row
+			if idx >= 0 && idx < len(a.folders) {
+				a.selectedFolder = idx
+				if err := a.loadFolder(idx); err != nil {
+					a.setError(err)
+				}
+			}
+		case p.In(a.messageTbl.Inner):
+			a.focus = focusMessages
+			row := p.Y - a.messageTbl.Inner.Min.Y
+			// Row zero is the table header.
+			if row > 0 {
+				idx := a.messageOffset + row - 1
+				if idx >= 0 && idx < len(a.messages) {
+					a.selectedMessage = idx
+					if err := a.openMessage(idx); err != nil {
+						a.setError(err)
+					}
+				}
+			}
+		case p.In(a.preview.Inner):
+			a.focus = focusPreview
+		}
+	case "<MouseWheelUp>", "MouseWheelUp":
+		a.mouseWheel(p, -3)
+	case "<MouseWheelDown>", "MouseWheelDown":
+		a.mouseWheel(p, 3)
+	}
+}
+
+func (a *App) mouseWheel(p image.Point, delta int) {
+	switch {
+	case p.In(a.accountBar.Rectangle):
+		if delta < 0 {
+			a.switchAccount(-1)
+		} else {
+			a.switchAccount(1)
+		}
+	case p.In(a.updateBar.Rectangle):
+		// The update control is a button, not a scroll target.
+		return
+	case p.In(a.folderList.Inner):
+		a.focus = focusFolders
+		if len(a.folders) > 0 {
+			a.selectedFolder = clamp(a.selectedFolder+delta, 0, len(a.folders)-1)
+		}
+	case p.In(a.messageTbl.Inner):
+		a.focus = focusMessages
+		if len(a.messages) > 0 {
+			a.selectedMessage = clamp(a.selectedMessage+delta, 0, len(a.messages)-1)
+			if err := a.openMessage(a.selectedMessage); err != nil {
+				a.setError(err)
+			}
+		}
+	case p.In(a.preview.Inner):
+		a.focus = focusPreview
+		a.previewScroll = max(0, a.previewScroll+delta)
+	}
+}
+
+func (a *App) deleteSelected() {
+	if len(a.messages) == 0 || a.selectedMessage >= len(a.messages) {
+		a.status = "No message selected"
+		return
+	}
+	account := a.currentAccount()
+	trash, ok := maildir.FindFolder(a.folders, account.TrashFolder)
+	if !ok {
+		a.status = fmt.Sprintf("Trash folder %q not found; refusing to delete", account.TrashFolder)
+		return
+	}
+	entry := a.messages[a.selectedMessage]
+	if err := maildir.Delete(entry, trash); err != nil {
+		a.setError(err)
+		return
+	}
+	if err := a.loadFolder(a.selectedFolder); err != nil {
+		a.setError(err)
+		return
+	}
+	if a.selectedMessage >= len(a.messages) && len(a.messages) > 0 {
+		a.selectedMessage = len(a.messages) - 1
+		_ = a.openMessage(a.selectedMessage)
+	}
+	a.status = "Message deleted"
+}
+
+func (a *App) archiveSelected() {
+	if len(a.messages) == 0 || a.selectedMessage < 0 || a.selectedMessage >= len(a.messages) {
+		a.status = "No message selected"
+		return
+	}
+	account := a.currentAccount()
+	archive, ok := maildir.FindFolder(a.folders, account.ArchiveFolder)
+	if !ok {
+		a.status = fmt.Sprintf("Archive folder %q not found", account.ArchiveFolder)
+		return
+	}
+	entry := a.messages[a.selectedMessage]
+	if err := maildir.Archive(entry, archive); err != nil {
+		a.setError(err)
+		return
+	}
+	if err := a.loadFolder(a.selectedFolder); err != nil {
+		a.setError(err)
+		return
+	}
+	if a.selectedMessage >= len(a.messages) && len(a.messages) > 0 {
+		a.selectedMessage = len(a.messages) - 1
+		_ = a.openMessage(a.selectedMessage)
+	}
+	a.status = "Message archived"
+}
+
+func (a *App) archiveAvailable() bool {
+	if len(a.folders) == 0 {
+		return false
+	}
+	_, ok := maildir.FindFolder(a.folders, a.currentAccount().ArchiveFolder)
+	return ok
+}
+
+func (a *App) saveAttachments() {
+	if a.parsed == nil {
+		a.status = "No message selected"
+		return
+	}
+	if len(a.parsed.Attachments) == 0 {
+		a.status = "This message has no attachments"
+		return
+	}
+	account := a.currentAccount()
+	saved, err := mimeutil.SaveAttachments(a.parsed, account.DownloadDir)
+	if err != nil {
+		a.setError(err)
+		return
+	}
+	a.status = fmt.Sprintf("Saved %d attachment(s) to %s", len(saved), account.DownloadDir)
+}
+
+func (a *App) runSync() {
+	if a.autoSyncing {
+		a.status = "Automatic sync is already in progress"
+		return
+	}
+	account := a.currentAccount()
+	if strings.TrimSpace(account.ReceiveCommand) == "" {
+		a.status = fmt.Sprintf("No receive command configured for %s", account.Name)
+		return
+	}
+	a.status = fmt.Sprintf("Synchronizing %s...", account.Name)
+	a.render()
+	ctx := context.Background()
+	out, err := transport.Receive(ctx, account.ReceiveCommand)
+	if err != nil {
+		a.status = commandError("Receive command failed", out, err)
+		return
+	}
+	if err := a.refreshFolders(); err != nil {
+		a.setError(err)
+		return
+	}
+	if a.view != 0 {
+		if err := a.loadPIM(); err != nil {
+			a.setError(err)
+			return
+		}
+	}
+	a.status = account.Name + " synchronized"
+	if s := strings.TrimSpace(out); s != "" {
+		a.status += ": " + lastLine(s)
+	}
+}
+
+func (a *App) startCompose(source *mimeutil.ParsedMessage, forward bool) {
+	accountIndex := a.account
+	if source != nil && !forward {
+		accountIndex = a.preferredReplyAccount(source)
+	}
+	c := &composeState{
+		from:         widgets.NewParagraph(),
+		to:           newTextInput(),
+		cc:           newTextInput(),
+		bcc:          newTextInput(),
+		subject:      newTextInput(),
+		body:         newTextArea(),
+		attachPrompt: newTextInput(),
+		account:      accountIndex,
+		isReply:      source != nil && !forward,
+		isForward:    source != nil && forward,
+	}
+	if accountIndex >= 0 && accountIndex < len(a.cfg.Accounts) {
+		c.pgpSign = a.cfg.Accounts[accountIndex].GPG.Enabled && a.cfg.Accounts[accountIndex].GPG.AutoSign
+		c.pgpEncrypt = a.cfg.Accounts[accountIndex].GPG.Enabled && a.cfg.Accounts[accountIndex].GPG.AutoEncrypt
+	}
+	if c.isReply {
+		c.from.Title = "Reply from"
+	} else {
+		c.from.Title = "From"
+	}
+	c.from.BorderRounded = true
+	c.to.Title = "To"
+	c.cc.Title = "Cc"
+	c.bcc.Title = "Bcc"
+	c.subject.Title = "Subject"
+	c.body.Title = "Body"
+	c.body.ShowCursor = true
+	c.body.hardWrap = true
+	c.attachPrompt.Title = "Attach file path"
+	a.styleComposeWidgets(c)
+
+	if source != nil && forward {
+		c.subject.Text = addSubjectPrefix(source.Subject, "Fwd:")
+		c.body.Text = forwardBody(source)
+		c.forwardAttachments = append([]mimeutil.Attachment(nil), source.Attachments...)
+	} else if source != nil {
+		c.to.Text = replyAddress(source.From)
+		c.subject.Text = addSubjectPrefix(source.Subject, "Re:")
+		c.inReplyTo = source.MessageID
+		c.references = strings.TrimSpace(strings.TrimSpace(source.References) + " " + strings.TrimSpace(source.MessageID))
+		c.body.Text = quoteBody(source)
+	}
+	if c.isReply {
+		c.field = composeBody
+	} else {
+		// New messages and forwards need a recipient first, so put the cursor
+		// directly in To rather than on the account selector.
+		c.field = composeTo
+	}
+	c.to.Cursor = utf8.RuneCountInString(c.to.Text)
+	c.subject.Cursor = utf8.RuneCountInString(c.subject.Text)
+	a.compose = c
+	a.updateComposeFrom()
+	a.status = composeModeName(c) + " ready"
+	if c.isReply {
+		if result := a.saveReplyContact(source.From, c.account); result != "" {
+			a.status += " — " + result
+		}
+	}
+	a.loadComposeContacts()
+}
+
+func (a *App) handleComposeEvent(e ui.Event) bool {
+	e.ID = editorEventID(e)
+	c := a.compose
+	if c == nil {
+		return false
+	}
+	if e.Type == ui.MouseEvent {
+		a.handleComposeMouse(e)
+		return false
+	}
+	if e.Type != ui.KeyboardEvent {
+		return false
+	}
+
+	if c.attachPrompt.Text != "" || c.attachPrompt.TitleBottom == "active" {
+		return a.handleAttachPrompt(e.ID)
+	}
+	keys := a.bindings()
+
+	if e.ID == "<C-c>" {
+		return true
+	}
+	if e.ID == "<Escape>" && a.dismissCompletion() {
+		return false
+	}
+	if bindingMatches(e.ID, keys.Cancel) {
+		a.compose = nil
+		a.status = "Compose cancelled"
+		return false
+	}
+	if bindingMatches(e.ID, keys.Send) {
+		a.sendCompose()
+		return false
+	}
+	if bindingMatches(e.ID, keys.Attach) {
+		c.attachPrompt.Text = ""
+		c.attachPrompt.Cursor = 0
+		c.attachPrompt.selection.reset()
+		c.attachPrompt.TitleBottom = "active"
+		return false
+	}
+	if bindingMatches(e.ID, keys.PGPMode) {
+		a.cycleComposePGPMode()
+		return false
+	}
+	if a.handleCompletionKey(e.ID) {
+		return false
+	}
+
+	// The body is a multiline editor. A literal Tab must stay in the body;
+	// otherwise terminal paste (Shift+Insert, middle-click, etc.) can turn a
+	// pasted tab into the global NextField binding and spill the remainder of
+	// the paste into From/To/Cc/Bcc/Subject. Shift+Tab still leaves the body,
+	// and a custom non-Tab NextField binding continues to work normally.
+	if c.field == composeBody {
+		if bindingMatches(e.ID, keys.PreviousField) || (bindingEventID(keys.PreviousField) == "<Backtab>" && e.ID == "<S-Tab>") {
+			c.field = (c.field + 5) % 6
+			return false
+		}
+		if bindingMatches(e.ID, keys.NextField) && e.ID != "<Tab>" {
+			c.field = (c.field + 1) % 6
+			return false
+		}
+		a.editTextArea(c.body, e.ID)
+		return false
+	}
+
+	if bindingMatches(e.ID, keys.NextField) {
+		c.field = (c.field + 1) % 6
+		return false
+	}
+	if bindingMatches(e.ID, keys.PreviousField) || (bindingEventID(keys.PreviousField) == "<Backtab>" && e.ID == "<S-Tab>") {
+		c.field = (c.field + 5) % 6
+		return false
+	}
+
+	if c.field == composeFrom {
+		switch {
+		case e.ID == "<Left>", e.ID == "<Up>", bindingMatches(e.ID, keys.FocusLeft), bindingMatches(e.ID, keys.MoveUp):
+			a.cycleComposeAccount(-1)
+		case e.ID == "<Right>", e.ID == "<Down>", bindingMatches(e.ID, keys.FocusRight), bindingMatches(e.ID, keys.MoveDown), bindingMatches(e.ID, keys.Open), e.ID == " ":
+			a.cycleComposeAccount(1)
+		}
+		return false
+	}
+	a.editInput(a.activeInput(), e.ID)
+	return false
+}
+
+func (a *App) handleAttachPrompt(id string) bool {
+	c := a.compose
+	keys := a.bindings()
+	if id == "<C-c>" {
+		return true
+	}
+	if bindingMatches(id, keys.Cancel) {
+		c.attachPrompt.Text = ""
+		c.attachPrompt.TitleBottom = ""
+		return false
+	}
+	if id == "<Enter>" {
+		path := expandUserPath(strings.TrimSpace(c.attachPrompt.Text))
+		st, err := os.Stat(path)
+		if err != nil {
+			a.status = "Attachment: " + err.Error()
+			return false
+		}
+		if st.IsDir() {
+			a.status = "Attachment path is a directory"
+			return false
+		}
+		c.attachments = append(c.attachments, path)
+		c.attachPrompt.Text = ""
+		c.attachPrompt.TitleBottom = ""
+		a.status = "Attached " + filepath.Base(path)
+		return false
+	}
+	a.editInput(c.attachPrompt, id)
+	return false
+}
+
+func (a *App) handleComposeMouse(e ui.Event) {
+	in := a.activeInput()
+	if (in == nil || !in.selection.dragging) && a.handleCompletionMouse(e) {
+		return
+	}
+	m, ok := e.Payload.(ui.Mouse)
+	if !ok {
+		return
+	}
+	p := image.Pt(m.X, m.Y)
+	c := a.compose
+	if c.attachPrompt.TitleBottom == "active" {
+		c.attachPrompt.mouse(e)
+		return
+	}
+	fields := []struct {
+		input *textInput
+		field composeField
+	}{
+		{c.to, composeTo}, {c.cc, composeCc}, {c.bcc, composeBcc}, {c.subject, composeSubject},
+	}
+	// A drag keeps ownership even after the pointer crosses another field.
+	if c.body.selection.dragging && c.body.mouse(e) {
+		c.field = composeBody
+		return
+	}
+	for _, f := range fields {
+		if f.input.selection.dragging && f.input.mouse(e) {
+			c.field = f.field
+			return
+		}
+	}
+	for _, f := range fields {
+		if f.input.mouse(e) {
+			c.field = f.field
+			return
+		}
+	}
+	if c.body.mouse(e) {
+		c.field = composeBody
+		return
+	}
+	if !p.In(c.from.Inner) {
+		return
+	}
+	switch e.ID {
+	case "<MouseLeft>", "MouseLeft", "<MouseWheelDown>", "MouseWheelDown":
+		c.field = composeFrom
+		a.cycleComposeAccount(1)
+	case "<MouseWheelUp>", "MouseWheelUp":
+		c.field = composeFrom
+		a.cycleComposeAccount(-1)
+	}
+}
+
+func (a *App) activeInput() *textInput {
+	if a.compose == nil {
+		return nil
+	}
+	switch a.compose.field {
+	case composeTo:
+		return a.compose.to
+	case composeCc:
+		return a.compose.cc
+	case composeBcc:
+		return a.compose.bcc
+	case composeSubject:
+		return a.compose.subject
+	default:
+		return nil
+	}
+}
+
+func (a *App) editInput(in *textInput, id string) {
+	if in == nil {
+		return
+	}
+	in.Text, in.Cursor, _ = in.selection.edit(in.Text, in.Cursor, id, false, 1)
+}
+
+func (a *App) editTextArea(ta *textArea, id string) {
+	if ta == nil {
+		return
+	}
+	text, cursor, changed := ta.selection.edit(ta.Text, textOffset(ta.Text, ta.Cursor), id, true, ta.Inner.Dy())
+	ta.Text, ta.Cursor = text, textPoint(text, cursor)
+	if changed && ta.hardWrap && id != "<Backspace>" && id != "<Backspace2>" && id != "<Delete>" {
+		wrapComposeBodyLine(ta.TextArea)
+	}
+}
+
+func (a *App) sendCompose() {
+	c := a.compose
+	if c == nil {
+		return
+	}
+	account := a.composeAccount()
+	if strings.TrimSpace(account.SendCommand) == "" {
+		a.status = fmt.Sprintf("No send command configured for %s", account.Name)
+		return
+	}
+	if strings.TrimSpace(account.From) == "" {
+		a.status = fmt.Sprintf("No from address configured for %s", account.Name)
+		return
+	}
+	signature, err := config.ReadSignature(account)
+	if err != nil {
+		a.setError(err)
+		return
+	}
+
+	draft := mimeutil.Draft{
+		From:              account.From,
+		To:                strings.TrimSpace(c.to.Text),
+		Cc:                strings.TrimSpace(c.cc.Text),
+		Bcc:               strings.TrimSpace(c.bcc.Text),
+		Subject:           strings.TrimSpace(c.subject.Text),
+		Body:              applySignature(c.body.Text, signature),
+		InReplyTo:         c.inReplyTo,
+		References:        c.references,
+		Attachments:       append([]string(nil), c.attachments...),
+		MemoryAttachments: append([]mimeutil.Attachment(nil), c.forwardAttachments...),
+	}
+	raw, err := mimeutil.Build(draft)
+	if err != nil {
+		a.setError(err)
+		return
+	}
+	if c.pgpSign || c.pgpEncrypt {
+		a.status = fmt.Sprintf("Applying OpenPGP (%s)...", composePGPModeName(c, account))
+		a.render()
+		raw, err = pgp.ProtectOutgoing(context.Background(), raw, pgp.OutgoingOptions{
+			Settings: pgpSettings(account),
+			Sign:     c.pgpSign,
+			Encrypt:  c.pgpEncrypt,
+		})
+		if err != nil {
+			a.setError(err)
+			return
+		}
+	}
+	a.status = fmt.Sprintf("Sending from %s...", account.Name)
+	a.render()
+	out, err := transport.Send(context.Background(), account.SendCommand, raw)
+	if err != nil {
+		a.status = commandError("Send command failed", out, err)
+		return
+	}
+	a.compose = nil
+	a.status = fmt.Sprintf("Message sent from %s", account.Name)
+	if s := strings.TrimSpace(out); s != "" {
+		a.status += ": " + lastLine(s)
+	}
+}
+
+func (a *App) render() {
+	w, h := ui.TerminalDimensions()
+	if w < 60 || h < 24 {
+		p := widgets.NewParagraph()
+		p.Title = "MailSalon"
+		p.Text = fmt.Sprintf("Terminal is too small (%dx%d).\nPlease resize to at least 60x24.", w, h)
+		p.BackgroundColor = a.theme.background
+		p.TextStyle = ui.NewStyle(a.theme.foreground, a.theme.background)
+		p.BorderStyle = ui.NewStyle(a.theme.border, a.theme.background)
+		p.TitleStyle = ui.NewStyle(a.theme.title, a.theme.background)
+		p.SetRect(0, 0, max(1, w), max(1, h))
+		ui.Render(p)
+		return
+	}
+	if a.calendarDialog != nil {
+		a.renderCalendarImport(w, h)
+		return
+	}
+	if a.compose != nil {
+		a.renderCompose(w, h)
+		return
+	}
+	if a.view != 0 {
+		a.renderPIM(w, h)
+		return
+	}
+
+	folderW := clamp(w/5, 18, 30)
+	footerY := h - 3
+	rightX := folderW
+	listH := max(8, (h-1)*45/100)
+	if listH > h-7 {
+		listH = h - 7
+	}
+
+	accountH := 3
+	updateH := 3
+	a.accountBar.SetRect(0, 1, folderW, 1+accountH)
+	a.updateBar.SetRect(0, 1+accountH, folderW, 1+accountH+updateH)
+	a.folderList.SetRect(0, 1+accountH+updateH, folderW, footerY)
+	a.messageTbl.SetRect(rightX, 1, w, listH)
+	previewEnd := footerY
+	if a.hasCalendarEvents() {
+		previewEnd -= 3
+	}
+	a.preview.SetRect(rightX, listH, w, previewEnd)
+	setBarRect(a.footer, 0, footerY, w, h)
+
+	a.populateAccountBar()
+	a.populateUpdateBar()
+	a.folderList.Title = "Folders"
+	a.populateFolderList()
+	a.populateMessageTable()
+	a.populatePreview()
+	a.footer.Text = a.footerText()
+
+	a.updateFocusStyles()
+	items := append(a.layoutViewTabs(w), a.accountBar, a.updateBar, a.folderList, a.messageTbl, a.preview, a.footer)
+	if a.hasCalendarEvents() {
+		items = append(items, a.layoutCalendarButton(rightX, footerY-3, w))
+	}
+	if a.searchActive {
+		promptW := clamp(w-12, 40, 90)
+		x := (w - promptW) / 2
+		y := max(1, h/2-2)
+		a.searchPrompt.SetRect(x, y, x+promptW, y+3)
+		items = append(items, a.searchPrompt)
+	}
+	ui.Render(items...)
+}
+
+func (a *App) populateAccountBar() {
+	account := a.currentAccount()
+	keys := a.bindings()
+	if len(a.cfg.Accounts) > 1 {
+		a.accountBar.Title = safeUI(fmt.Sprintf("Account %d/%d", a.account+1, len(a.cfg.Accounts)))
+		a.accountBar.Text = safeUI("‹ " + account.Name + " ›")
+		a.accountBar.TitleBottom = safeUI(keyLabel(keys.SwitchAccount) + "/Click switch")
+	} else {
+		a.accountBar.Title = "Account"
+		a.accountBar.Text = safeUI(account.Name)
+		a.accountBar.TitleBottom = "only account"
+	}
+}
+
+func (a *App) populateUpdateBar() {
+	account := a.currentAccount()
+	keys := a.bindings()
+	a.updateBar.Title = "Update Mail"
+	a.updateBar.Text = "↻ Update"
+	if strings.TrimSpace(account.ReceiveCommand) == "" {
+		a.updateBar.Text = "Update unavailable"
+		a.updateBar.TitleBottom = "no receive command"
+		return
+	}
+	a.updateBar.TitleBottom = safeUI(keyLabel(keys.Sync) + "/Click update")
+}
+
+func (a *App) populateFolderList() {
+	visible := max(1, a.folderList.Inner.Dy())
+	a.folderOffset = keepVisible(a.selectedFolder, a.folderOffset, visible, len(a.folders))
+	end := min(len(a.folders), a.folderOffset+visible)
+	rows := make([]string, 0, max(0, end-a.folderOffset))
+	for _, f := range a.folders[a.folderOffset:end] {
+		rows = append(rows, safeUI(f.Name))
+	}
+	a.folderList.Rows = rows
+	a.folderList.SelectedRow = a.selectedFolder - a.folderOffset
+	if len(a.folders) == 0 {
+		a.folderList.Rows = []string{"(no folders)"}
+		// List does not support a negative selection, even for placeholders.
+		a.folderList.SelectedRow = 0
+	}
+}
+
+func (a *App) populateMessageTable() {
+	a.messageTbl.Title = "Messages"
+	if a.searchQuery != "" {
+		a.messageTbl.Title = safeUI(fmt.Sprintf("Messages — search: %s", a.searchQuery))
+	}
+	visible := max(1, a.messageTbl.Inner.Dy()-1)
+	a.messageOffset = keepVisible(a.selectedMessage, a.messageOffset, visible, len(a.messages))
+	end := min(len(a.messages), a.messageOffset+visible)
+	rows := make([][]string, 0, visible+1)
+	rows = append(rows, []string{"", "From", "Subject", "Date"})
+	a.messageTbl.RowStyles = map[int]ui.Style{
+		0: ui.NewStyle(a.theme.muted, a.theme.background),
+	}
+	for i, m := range a.messages[a.messageOffset:end] {
+		mark := " "
+		if m.Unread {
+			mark = "●"
+			a.messageTbl.RowStyles[i+1] = ui.NewStyle(a.theme.unread, a.theme.background)
+		}
+		rows = append(rows, []string{
+			mark,
+			safeUI(m.From),
+			safeUI(emptySubject(m.Subject)),
+			formatDate(m.Date),
+		})
+	}
+	a.messageTbl.Rows = rows
+	a.messageTbl.SelectedRow = a.selectedMessage - a.messageOffset + 1
+	if len(a.messages) == 0 {
+		a.messageTbl.Rows = [][]string{{"", "From", "Subject", "Date"}, {"", "", "(no messages)", ""}}
+		a.messageTbl.SelectedRow = -1
+	}
+
+	innerW := max(20, a.messageTbl.Inner.Dx())
+	dateW := 16
+	markW := 2
+	fromW := clamp(innerW/4, 14, 28)
+	subjectW := max(12, innerW-markW-fromW-dateW-3)
+	a.messageTbl.ColumnWidths = []int{markW, fromW, subjectW, dateW}
+}
+
+func (a *App) populatePreview() {
+	a.preview.TitleBottom = a.messagePreviewLegend()
+	if a.parsed == nil {
+		a.preview.Text = "No message selected."
+		return
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "From: %s\n", a.parsed.From)
+	fmt.Fprintf(&b, "To: %s\n", a.parsed.To)
+	if strings.TrimSpace(a.parsed.Cc) != "" {
+		fmt.Fprintf(&b, "Cc: %s\n", a.parsed.Cc)
+	}
+	fmt.Fprintf(&b, "Date: %s\n", a.parsed.Date)
+	fmt.Fprintf(&b, "Subject: %s\n", emptySubject(a.parsed.Subject))
+	if security := strings.TrimSpace(a.security.Summary()); security != "" {
+		fmt.Fprintf(&b, "%s\n", security)
+	}
+	if len(a.parsed.Attachments) > 0 {
+		names := make([]string, 0, len(a.parsed.Attachments))
+		for _, at := range a.parsed.Attachments {
+			names = append(names, at.Filename)
+		}
+		fmt.Fprintf(&b, "Attachments: %s\n", strings.Join(names, ", "))
+	}
+	b.WriteString(a.calendarSummary())
+	b.WriteString("\n")
+	b.WriteString(a.parsed.Body)
+
+	width := max(10, a.preview.Inner.Dx())
+	lines := wrapLines(safeUI(b.String()), width)
+	visible := max(1, a.preview.Inner.Dy())
+	maxScroll := max(0, len(lines)-visible)
+	a.previewScroll = clamp(a.previewScroll, 0, maxScroll)
+	end := min(len(lines), a.previewScroll+visible)
+	a.preview.Text = strings.Join(lines[a.previewScroll:end], "\n")
+	if len(lines) == 0 {
+		a.preview.Text = "(empty message)"
+	}
+}
+
+func (a *App) updateFocusStyles() {
+	active := ui.NewStyle(a.theme.activeBorder, a.theme.background)
+	inactive := ui.NewStyle(a.theme.border, a.theme.background)
+	a.folderList.BorderStyle = inactive
+	a.folderList.SelectedStyle = ui.NewStyle(a.theme.selectedFG, a.theme.selectedBG)
+	if (a.view == 0 && len(a.folders) == 0) || (a.view != 0 && len(a.pimCollections) == 0) {
+		// Keep the valid placeholder row visually unselected.
+		a.folderList.SelectedStyle = a.folderList.TextStyle
+	}
+	a.messageTbl.BorderStyle = inactive
+	a.preview.BorderStyle = inactive
+	switch a.focus {
+	case focusFolders:
+		a.folderList.BorderStyle = active
+	case focusMessages:
+		a.messageTbl.BorderStyle = active
+	case focusPreview:
+		a.preview.BorderStyle = active
+	}
+	a.updateFooterStyle()
+}
+
+func (a *App) footerText() string {
+	account := a.currentAccount()
+	keys := a.bindings()
+	line1 := fmt.Sprintf(" [%s] %s", account.Name, a.status)
+	line2Parts := []string{
+		keyLabel(keys.MailView) + " Mail", keyLabel(keys.ContactsView) + " Contacts", keyLabel(keys.CalendarView) + " Calendar",
+		keyLabel(keys.Compose) + " Compose",
+		keyLabel(keys.Sync) + " Sync",
+		keyLabel(keys.Reply) + " Reply",
+		keyLabel(keys.Forward) + " Forward",
+	}
+	if a.hasCalendarEvents() {
+		line2Parts = append(line2Parts, keyLabel(keys.ImportCalendar)+" Calendar attachment")
+	}
+	if a.archiveAvailable() {
+		line2Parts = append(line2Parts, keyLabel(keys.Archive)+" Archive")
+	}
+	line2Parts = append(line2Parts,
+		keyLabel(keys.ToggleRead)+" Read/unread",
+		keyLabel(keys.Search)+" Search",
+	)
+	line3Parts := []string{
+		keyLabel(keys.Delete) + " Delete",
+		keyLabel(keys.SaveAttachments) + " Save attachments",
+		keyLabel(keys.SwitchAccount) + " Switch account",
+		keyLabel(keys.FocusNext) + " Focus",
+		keyLabel(keys.MoveDown) + "/" + keyLabel(keys.MoveUp) + " Move",
+		keyLabel(keys.Open) + " Open",
+		keyLabel(keys.Refresh) + " Refresh",
+		keyLabel(keys.Quit) + " Quit",
+	}
+	line2 := " " + strings.Join(line2Parts, "  ")
+	line3 := " " + strings.Join(line3Parts, "  ")
+	return safeUI(line1 + "\n" + line2 + "\n" + line3)
+}
+
+func (a *App) messagePreviewLegend() string {
+	keys := a.bindings()
+	parts := []string{
+		keyLabel(keys.MoveDown) + "/" + keyLabel(keys.MoveUp) + " Scroll",
+		keyLabel(keys.PageUp) + "/" + keyLabel(keys.PageDown) + " Page",
+		keyLabel(keys.Reply) + " Reply",
+		keyLabel(keys.Forward) + " Fwd",
+	}
+	if a.archiveAvailable() {
+		parts = append(parts, keyLabel(keys.Archive)+" Archive")
+	}
+	parts = append(parts,
+		keyLabel(keys.ToggleRead)+" Read/Unread",
+		keyLabel(keys.Search)+" Search",
+		keyLabel(keys.SaveAttachments)+" Save",
+		keyLabel(keys.Delete)+" Delete",
+	)
+	return safeUI(strings.Join(parts, "  "))
+}
+
+func (a *App) renderCompose(w, h int) {
+	c := a.compose
+	footerY := h - 4
+	inputH := 3
+	y := 0
+	c.from.SetRect(0, y, w, y+inputH)
+	y += inputH
+	c.to.SetRect(0, y, w, y+inputH)
+	y += inputH
+	c.cc.SetRect(0, y, w, y+inputH)
+	y += inputH
+	c.bcc.SetRect(0, y, w, y+inputH)
+	y += inputH
+	c.subject.SetRect(0, y, w, y+inputH)
+	y += inputH
+	attachY := footerY - 3
+	if attachY <= y+3 {
+		attachY = footerY
+	}
+	c.body.SetRect(0, y, w, attachY)
+
+	attachments := widgets.NewParagraph()
+	attachments.Title = "Attachments"
+	attachments.BorderRounded = true
+	attachments.BackgroundColor = a.theme.background
+	attachments.TextStyle = ui.NewStyle(a.theme.foreground, a.theme.background)
+	attachments.BorderStyle = ui.NewStyle(a.theme.border, a.theme.background)
+	attachments.TitleStyle = ui.NewStyle(a.theme.title, a.theme.background)
+	attachments.TitleBottomStyle = ui.NewStyle(a.theme.muted, a.theme.background)
+	attachments.SetRect(0, attachY, w, footerY)
+	if len(c.attachments) == 0 && len(c.forwardAttachments) == 0 {
+		attachments.Text = "(none)"
+	} else {
+		names := make([]string, 0, len(c.attachments)+len(c.forwardAttachments))
+		for _, p := range c.attachments {
+			names = append(names, filepath.Base(p))
+		}
+		for _, at := range c.forwardAttachments {
+			names = append(names, at.Filename+" (forwarded)")
+		}
+		attachments.Text = safeUI(strings.Join(names, ", "))
+	}
+
+	setBarRect(a.footer, 0, footerY, w, h)
+	keys := a.bindings()
+	fromLabel := "From"
+	fromHint := "From: selected account identity"
+	if c.isReply {
+		fromLabel = "Reply from"
+	}
+	if len(a.cfg.Accounts) > 1 {
+		fromHint = fmt.Sprintf("%s: %s/%s switch account", fromLabel, keyLabel(keys.FocusLeft), keyLabel(keys.FocusRight))
+	}
+	legend := fmt.Sprintf(
+		" [%s] %s — OpenPGP: %s\n %s Send  %s Attach  %s PGP mode  %s Cancel  %s/%s Fields\n To/Cc/Bcc: contact matches as you type; Up/Down choose, Enter/Tab accept  Body: Enter newline, Tab indent\n %s  Shift+arrows/drag Select  Alt+A All  Backspace/Delete Edit",
+		composeModeName(c), a.status, composePGPModeName(c, a.composeAccount()),
+		keyLabel(keys.Send), keyLabel(keys.Attach), keyLabel(keys.PGPMode), keyLabel(keys.Cancel),
+		keyLabel(keys.NextField), keyLabel(keys.PreviousField), fromHint,
+	)
+	a.footer.Text = safeUI(legend)
+	a.updateFooterStyle()
+
+	a.highlightComposeField()
+	items := []ui.Drawable{c.from, c.to, c.cc, c.bcc, c.subject, c.body, attachments, a.footer}
+	if c.attachPrompt.TitleBottom == "active" {
+		promptW := clamp(w-10, 40, 90)
+		x := (w - promptW) / 2
+		py := max(1, h/2-2)
+		c.attachPrompt.SetRect(x, py, x+promptW, py+3)
+		items = append(items, c.attachPrompt)
+	} else if popup := a.completionPopup(w, h); popup != nil {
+		items = append(items, popup)
+	}
+	ui.Render(items...)
+}
+
+func composeModeName(c *composeState) string {
+	if c == nil {
+		return "Compose"
+	}
+	if c.isReply {
+		return "Reply"
+	}
+	if c.isForward {
+		return "Forward"
+	}
+	return "Compose"
+}
+
+func (a *App) highlightComposeField() {
+	c := a.compose
+	inactive := ui.NewStyle(a.theme.border, a.theme.background)
+	active := ui.NewStyle(a.theme.activeBorder, a.theme.background)
+	cursor := ui.NewStyle(a.theme.cursorFG, a.theme.cursorBG)
+
+	// gotui's single-line Input widget always draws a cursor. Make the cursor
+	// visually disappear on inactive fields by giving it the field's normal
+	// text style, then restore the configured cursor style only for the field
+	// that currently owns compose focus.
+	c.from.BorderStyle = inactive
+	for _, w := range []*textInput{c.to, c.cc, c.bcc, c.subject} {
+		w.BorderStyle = inactive
+		w.CursorStyle = w.TextStyle
+	}
+	c.body.BorderStyle = inactive
+	c.body.ShowCursor = false
+	c.attachPrompt.BorderStyle = inactive
+
+	// The attachment prompt temporarily owns focus while it is visible, so do
+	// not leave a second cursor behind in the underlying compose form.
+	if c.attachPrompt.TitleBottom == "active" {
+		c.attachPrompt.BorderStyle = active
+		c.attachPrompt.CursorStyle = cursor
+		return
+	}
+
+	switch c.field {
+	case composeFrom:
+		c.from.BorderStyle = active
+	case composeTo:
+		c.to.BorderStyle = active
+		c.to.CursorStyle = cursor
+	case composeCc:
+		c.cc.BorderStyle = active
+		c.cc.CursorStyle = cursor
+	case composeBcc:
+		c.bcc.BorderStyle = active
+		c.bcc.CursorStyle = cursor
+	case composeSubject:
+		c.subject.BorderStyle = active
+		c.subject.CursorStyle = cursor
+	case composeBody:
+		c.body.BorderStyle = active
+		c.body.ShowCursor = true
+	}
+}
+
+func (a *App) styleComposeWidgets(c *composeState) {
+	border := ui.NewStyle(a.theme.border, a.theme.background)
+	title := ui.NewStyle(a.theme.title, a.theme.background)
+	text := ui.NewStyle(a.theme.foreground, a.theme.background)
+	muted := ui.NewStyle(a.theme.muted, a.theme.background)
+	cursor := ui.NewStyle(a.theme.cursorFG, a.theme.cursorBG)
+
+	c.from.BackgroundColor = a.theme.background
+	c.from.BorderStyle = border
+	c.from.TitleStyle = title
+	c.from.TitleBottomStyle = muted
+	c.from.TextStyle = ui.NewStyle(a.theme.account, a.theme.background)
+
+	for _, w := range []*textInput{c.to, c.cc, c.bcc, c.subject, c.attachPrompt} {
+		w.BorderRounded = true
+		w.BackgroundColor = a.theme.background
+		w.BorderStyle = border
+		w.TitleStyle = title
+		w.TitleBottomStyle = muted
+		w.TextStyle = text
+		w.CursorStyle = cursor
+		w.SelectionStyle = ui.NewStyle(a.theme.selectedFG, a.theme.selectedBG)
+	}
+	c.body.BorderRounded = true
+	c.body.BackgroundColor = a.theme.background
+	c.body.BorderStyle = border
+	c.body.TitleStyle = title
+	c.body.TitleBottomStyle = muted
+	c.body.TextStyle = text
+	c.body.CursorStyle = cursor
+	c.body.SelectionStyle = ui.NewStyle(a.theme.selectedFG, a.theme.selectedBG)
+}
+
+func (a *App) updateFooterStyle() {
+	statusColor := a.theme.status
+	lower := strings.ToLower(a.status)
+	if strings.HasPrefix(lower, "error:") || strings.Contains(lower, " failed") || strings.HasPrefix(lower, "failed") {
+		statusColor = a.theme.error
+	}
+	a.footer.BackgroundColor = a.theme.background
+	a.footer.TextStyle = ui.NewStyle(statusColor, a.theme.background)
+}
+
+func themeWithDefaults(t config.Theme) config.Theme {
+	d := config.DefaultTheme()
+	set := func(dst *string, src string) {
+		if strings.TrimSpace(src) != "" {
+			*dst = src
+		}
+	}
+	set(&d.Background, t.Background)
+	set(&d.Foreground, t.Foreground)
+	set(&d.Muted, t.Muted)
+	set(&d.Border, t.Border)
+	set(&d.ActiveBorder, t.ActiveBorder)
+	set(&d.Title, t.Title)
+	set(&d.SelectedFG, t.SelectedFG)
+	set(&d.SelectedBG, t.SelectedBG)
+	set(&d.Account, t.Account)
+	set(&d.Unread, t.Unread)
+	set(&d.Status, t.Status)
+	set(&d.Error, t.Error)
+	set(&d.CursorFG, t.CursorFG)
+	set(&d.CursorBG, t.CursorBG)
+	return d
+}
+
+func resolveTheme(t config.Theme) (resolvedTheme, error) {
+	parse := func(name, value string) (ui.Color, error) {
+		c, err := parseColor(value)
+		if err != nil {
+			return ui.ColorClear, fmt.Errorf("theme.%s: %w", name, err)
+		}
+		return c, nil
+	}
+	var out resolvedTheme
+	var err error
+	if out.background, err = parse("background", t.Background); err != nil {
+		return out, err
+	}
+	if out.foreground, err = parse("foreground", t.Foreground); err != nil {
+		return out, err
+	}
+	if out.muted, err = parse("muted", t.Muted); err != nil {
+		return out, err
+	}
+	if out.border, err = parse("border", t.Border); err != nil {
+		return out, err
+	}
+	if out.activeBorder, err = parse("active_border", t.ActiveBorder); err != nil {
+		return out, err
+	}
+	if out.title, err = parse("title", t.Title); err != nil {
+		return out, err
+	}
+	if out.selectedFG, err = parse("selected_fg", t.SelectedFG); err != nil {
+		return out, err
+	}
+	if out.selectedBG, err = parse("selected_bg", t.SelectedBG); err != nil {
+		return out, err
+	}
+	if out.account, err = parse("account", t.Account); err != nil {
+		return out, err
+	}
+	if out.unread, err = parse("unread", t.Unread); err != nil {
+		return out, err
+	}
+	if out.status, err = parse("status", t.Status); err != nil {
+		return out, err
+	}
+	if out.error, err = parse("error", t.Error); err != nil {
+		return out, err
+	}
+	if out.cursorFG, err = parse("cursor_fg", t.CursorFG); err != nil {
+		return out, err
+	}
+	if out.cursorBG, err = parse("cursor_bg", t.CursorBG); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+func parseColor(value string) (ui.Color, error) {
+	s := strings.ToLower(strings.TrimSpace(value))
+	if len(s) == 7 && s[0] == '#' {
+		r, err := strconv.ParseUint(s[1:3], 16, 8)
+		if err != nil {
+			return ui.ColorClear, fmt.Errorf("invalid color %q", value)
+		}
+		g, err := strconv.ParseUint(s[3:5], 16, 8)
+		if err != nil {
+			return ui.ColorClear, fmt.Errorf("invalid color %q", value)
+		}
+		b, err := strconv.ParseUint(s[5:7], 16, 8)
+		if err != nil {
+			return ui.ColorClear, fmt.Errorf("invalid color %q", value)
+		}
+		return ui.NewColorRGB(int32(r), int32(g), int32(b)), nil
+	}
+	colors := map[string]ui.Color{
+		"default": ui.ColorClear, "clear": ui.ColorClear,
+		"black": ui.ColorBlack, "red": ui.ColorRed, "green": ui.ColorGreen,
+		"yellow": ui.ColorYellow, "blue": ui.ColorBlue, "magenta": ui.ColorMagenta,
+		"cyan": ui.ColorCyan, "white": ui.ColorWhite, "grey": ui.ColorGrey,
+		"gray": ui.ColorGrey, "darkgrey": ui.ColorDarkGrey, "darkgray": ui.ColorDarkGrey,
+		"lightgrey": ui.ColorLightGrey, "lightgray": ui.ColorLightGrey, "silver": ui.ColorSilver,
+		"orange": ui.ColorOrange, "purple": ui.ColorPurple, "pink": ui.ColorPink,
+		"coral": ui.ColorCoral, "crimson": ui.ColorCrimson, "gold": ui.ColorGold,
+		"teal": ui.ColorTeal, "turquoise": ui.ColorTurquoise, "indigo": ui.ColorIndigo,
+		"violet": ui.ColorViolet, "olive": ui.ColorOlive, "navy": ui.ColorNavy,
+		"aliceblue": ui.ColorAliceBlue, "beige": ui.ColorBeige, "brown": ui.ColorBrown,
+		"darkblue": ui.ColorDarkBlue, "darkcyan": ui.ColorDarkCyan, "darkgreen": ui.ColorDarkGreen,
+		"darkred": ui.ColorDarkRed, "hotpink": ui.ColorHotPink, "lightblue": ui.ColorLightBlue,
+		"lightcyan": ui.ColorLightCyan, "lightgreen": ui.ColorLightGreen, "lime": ui.ColorLime,
+		"maroon": ui.ColorMaroon, "mintcream": ui.ColorMintCream, "mistyrose": ui.ColorMistyRose,
+		"orchid": ui.ColorOrchid, "plum": ui.ColorPlum, "salmon": ui.ColorSalmon,
+		"seagreen": ui.ColorSeaGreen, "skyblue": ui.ColorSkyBlue, "slateblue": ui.ColorSlateBlue,
+		"tan": ui.ColorTan, "tomato": ui.ColorTomato, "wheat": ui.ColorWheat,
+	}
+	if c, ok := colors[s]; ok {
+		return c, nil
+	}
+	return ui.ColorClear, fmt.Errorf("unsupported color %q", value)
+}
+
+func (a *App) currentAccount() config.Account {
+	if len(a.cfg.Accounts) == 0 {
+		return config.Account{}
+	}
+	a.account = clamp(a.account, 0, len(a.cfg.Accounts)-1)
+	return a.cfg.Accounts[a.account]
+}
+
+func (a *App) composeAccount() config.Account {
+	if a.compose == nil || len(a.cfg.Accounts) == 0 {
+		return a.currentAccount()
+	}
+	a.compose.account = clamp(a.compose.account, 0, len(a.cfg.Accounts)-1)
+	return a.cfg.Accounts[a.compose.account]
+}
+
+func (a *App) switchAccount(delta int) {
+	if len(a.cfg.Accounts) < 2 {
+		a.status = "Only one account is configured"
+		return
+	}
+	a.account = wrapIndex(a.account+delta, len(a.cfg.Accounts))
+	a.selectedFolder = 0
+	a.selectedMessage = 0
+	a.folderOffset = 0
+	a.messageOffset = 0
+	a.previewScroll = 0
+	if err := a.refreshFolders(); err != nil {
+		a.setError(err)
+		return
+	}
+	if a.view != 0 {
+		a.setView(a.view)
+		return
+	}
+	a.status = "Switched to " + a.currentAccount().Name
+}
+
+func (a *App) cycleComposeAccount(delta int) {
+	if a.compose == nil || len(a.cfg.Accounts) < 2 {
+		return
+	}
+	a.compose.account = wrapIndex(a.compose.account+delta, len(a.cfg.Accounts))
+	a.applyComposePGPDefaults()
+	a.updateComposeFrom()
+	a.status = "From: " + a.composeAccount().From + " — OpenPGP: " + composePGPModeName(a.compose, a.composeAccount())
+	a.loadComposeContacts()
+}
+
+func (a *App) applyComposePGPDefaults() {
+	if a.compose == nil {
+		return
+	}
+	account := a.composeAccount()
+	a.compose.pgpSign = account.GPG.Enabled && account.GPG.AutoSign
+	a.compose.pgpEncrypt = account.GPG.Enabled && account.GPG.AutoEncrypt
+}
+
+func (a *App) cycleComposePGPMode() {
+	if a.compose == nil {
+		return
+	}
+	account := a.composeAccount()
+	if !account.GPG.Enabled {
+		a.compose.pgpSign = false
+		a.compose.pgpEncrypt = false
+		a.status = "OpenPGP is disabled for " + account.Name
+		return
+	}
+	switch {
+	case !a.compose.pgpSign && !a.compose.pgpEncrypt:
+		a.compose.pgpSign = true
+	case a.compose.pgpSign && !a.compose.pgpEncrypt:
+		a.compose.pgpSign = false
+		a.compose.pgpEncrypt = true
+	case !a.compose.pgpSign && a.compose.pgpEncrypt:
+		a.compose.pgpSign = true
+	default:
+		a.compose.pgpSign = false
+		a.compose.pgpEncrypt = false
+	}
+	a.status = "OpenPGP: " + composePGPModeName(a.compose, account)
+}
+
+func composePGPModeName(c *composeState, account config.Account) string {
+	if !account.GPG.Enabled {
+		return "Disabled"
+	}
+	if c == nil {
+		return "Off"
+	}
+	switch {
+	case c.pgpSign && c.pgpEncrypt:
+		return "Sign+Encrypt"
+	case c.pgpSign:
+		return "Sign"
+	case c.pgpEncrypt:
+		return "Encrypt"
+	default:
+		return "Off"
+	}
+}
+
+func pgpSettings(account config.Account) pgp.Settings {
+	return pgp.Settings{
+		Enabled:       account.GPG.Enabled,
+		Command:       account.GPG.Command,
+		HomeDir:       account.GPG.HomeDir,
+		SignKey:       account.GPG.SignKey,
+		EncryptToSelf: account.GPG.EncryptToSelf,
+	}
+}
+
+func (a *App) updateComposeFrom() {
+	if a.compose == nil {
+		return
+	}
+	account := a.composeAccount()
+	text := fmt.Sprintf("%s — %s", account.Name, account.From)
+	if account.SignatureFile != "" {
+		text += "   signature: " + account.SignatureFile
+	}
+	a.compose.from.Text = safeUI(text)
+	if len(a.cfg.Accounts) > 1 {
+		keys := a.bindings()
+		a.compose.from.TitleBottom = safeUI(keyLabel(keys.FocusLeft) + "/" + keyLabel(keys.FocusRight) + " select")
+	} else {
+		a.compose.from.TitleBottom = ""
+	}
+}
+
+func (a *App) preferredReplyAccount(p *mimeutil.ParsedMessage) int {
+	if p == nil {
+		return a.account
+	}
+	recipients := parseAddressSet(p.To + "," + p.Cc)
+	for i, account := range a.cfg.Accounts {
+		addr, err := mail.ParseAddress(account.From)
+		if err == nil && recipients[strings.ToLower(addr.Address)] {
+			return i
+		}
+	}
+	return a.account
+}
+
+func (a *App) setError(err error) {
+	a.status = "Error: " + err.Error()
+}
+
+func safeUI(s string) string {
+	// gotui supports inline style markup. Mail content is untrusted display data,
+	// so break the style introducers rather than letting a message restyle the UI.
+	replacer := strings.NewReplacer(
+		"](fg:", "] (fg:",
+		"](bg:", "] (bg:",
+		"](mod:", "] (mod:",
+	)
+	return replacer.Replace(s)
+}
+
+func printableRune(id string) (rune, bool) {
+	if utf8.RuneCountInString(id) != 1 {
+		return 0, false
+	}
+	r, _ := utf8.DecodeRuneInString(id)
+	if r < 0x20 || r == 0x7f {
+		return 0, false
+	}
+	return r, true
+}
+
+func parseAddressSet(raw string) map[string]bool {
+	out := make(map[string]bool)
+	addrs, err := mail.ParseAddressList(strings.Trim(raw, " ,"))
+	if err != nil {
+		return out
+	}
+	for _, addr := range addrs {
+		out[strings.ToLower(addr.Address)] = true
+	}
+	return out
+}
+
+func applySignature(body, signature string) string {
+	signature = strings.TrimRight(signature, "\r\n")
+	if strings.TrimSpace(signature) == "" {
+		return body
+	}
+	block := signature
+	trimmed := strings.TrimLeft(signature, " \t\r\n")
+	if !strings.HasPrefix(trimmed, "-- ") && trimmed != "--" {
+		block = "-- \n" + signature
+	}
+
+	markers := []string{"\n\nOn ", "\n\n---------- Forwarded message ----------"}
+	cut := -1
+	for _, marker := range markers {
+		if i := strings.Index(body, marker); i >= 0 && (cut < 0 || i < cut) {
+			cut = i
+		}
+	}
+	if cut >= 0 {
+		lead := strings.TrimRight(body[:cut], " \t\r\n")
+		if lead == "" {
+			return block + body[cut:]
+		}
+		return lead + "\n\n" + block + body[cut:]
+	}
+	lead := strings.TrimRight(body, "\r\n")
+	if lead == "" {
+		return block + "\n"
+	}
+	return lead + "\n\n" + block + "\n"
+}
+
+func wrapIndex(i, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	i %= n
+	if i < 0 {
+		i += n
+	}
+	return i
+}
+
+func replyAddress(raw string) string {
+	addr, err := mail.ParseAddress(raw)
+	if err == nil {
+		return addr.String()
+	}
+	return raw
+}
+
+func addSubjectPrefix(subject, prefix string) string {
+	subject = strings.TrimSpace(subject)
+	if strings.HasPrefix(strings.ToLower(subject), strings.ToLower(prefix)) {
+		return subject
+	}
+	if subject == "" {
+		return prefix
+	}
+	return prefix + " " + subject
+}
+
+func quoteBody(p *mimeutil.ParsedMessage) string {
+	var b strings.Builder
+	b.WriteString("\n\nOn ")
+	b.WriteString(p.Date)
+	b.WriteString(", ")
+	b.WriteString(p.From)
+	b.WriteString(" wrote:\n")
+	for _, line := range strings.Split(p.Body, "\n") {
+		b.WriteString("> ")
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+func forwardBody(p *mimeutil.ParsedMessage) string {
+	return fmt.Sprintf("\n\n---------- Forwarded message ----------\nFrom: %s\nDate: %s\nSubject: %s\nTo: %s\n\n%s\n",
+		p.From, p.Date, p.Subject, p.To, p.Body)
+}
+
+func commandError(prefix, output string, err error) string {
+	msg := prefix + ": " + err.Error()
+	if s := strings.TrimSpace(output); s != "" {
+		msg += " — " + lastLine(s)
+	}
+	return msg
+}
+
+func lastLine(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	if len(lines) == 0 {
+		return ""
+	}
+	line := strings.TrimSpace(lines[len(lines)-1])
+	if len(line) > 120 {
+		line = line[:120] + "…"
+	}
+	return line
+}
+
+func emptySubject(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "(no subject)"
+	}
+	return s
+}
+
+func formatDate(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	now := time.Now()
+	if now.Year() == t.Year() && now.YearDay() == t.YearDay() {
+		return t.Format("15:04")
+	}
+	if now.Year() == t.Year() {
+		return t.Format("Jan 02 15:04")
+	}
+	return t.Format("2006-01-02")
+}
+
+func wrapLines(s string, width int) []string {
+	if width < 1 {
+		width = 1
+	}
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(s, "\r", ""), "\n") {
+		runes := []rune(line)
+		if len(runes) == 0 {
+			out = append(out, "")
+			continue
+		}
+		for len(runes) > width {
+			cut := width
+			for i := width; i > width/2; i-- {
+				if runes[i-1] == ' ' || runes[i-1] == '\t' {
+					cut = i
+					break
+				}
+			}
+			out = append(out, string(runes[:cut]))
+			runes = runes[cut:]
+			for len(runes) > 0 && (runes[0] == ' ' || runes[0] == '\t') {
+				runes = runes[1:]
+			}
+		}
+		out = append(out, string(runes))
+	}
+	return out
+}
+
+func keepVisible(selected, offset, visible, total int) int {
+	if total <= 0 || visible <= 0 {
+		return 0
+	}
+	selected = clamp(selected, 0, total-1)
+	maxOffset := max(0, total-visible)
+	offset = clamp(offset, 0, maxOffset)
+	if selected < offset {
+		offset = selected
+	} else if selected >= offset+visible {
+		offset = selected - visible + 1
+	}
+	return clamp(offset, 0, maxOffset)
+}
+
+func expandUserPath(path string) string {
+	path = os.ExpandEnv(path)
+	if path == "~" {
+		home, _ := os.UserHomeDir()
+		return home
+	}
+	if strings.HasPrefix(path, "~/") {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}
+
+func clamp(v, lo, hi int) int {
+	if hi < lo {
+		return lo
+	}
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}

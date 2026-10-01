@@ -15,6 +15,21 @@ import (
 	"github.com/SeraphinaDX/MailSalonGUI/internal/pim"
 )
 
+func TestSharedCalendarPreferencesInGUI(t *testing.T) {
+	a, _ := demoApp(t)
+	a.cfg.CalendarDefaultView = "week"
+	a.cfg.CalendarWeekStart = "sunday"
+	v := a.newCollectionView(false)
+	if v.calendar.mode != "Week" || v.calendar.weekStart != time.Sunday {
+		t.Fatal("GUI ignored shared calendar settings")
+	}
+	date := time.Date(2026, 10, 2, 0, 0, 0, 0, time.Local)
+	from, to := calendarBounds("Month", date, v.calendar.weekStart)
+	if from.Weekday() != time.Sunday || !to.Equal(from.AddDate(0, 0, 42)) {
+		t.Fatal(from, to)
+	}
+}
+
 func calendarDemo(t *testing.T) (*App, chan func()) {
 	t.Helper()
 	a, q := demoApp(t)

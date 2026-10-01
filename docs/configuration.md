@@ -4,6 +4,13 @@ MailSalonGUI accepts MailSalon account/collection settings. It defaults to its
 own `mailsalongui/config.toml` and will not automatically change the terminal
 client's configuration. Passing the terminal client's path with `-config=PATH`
 uses that file directly, including if you save changes through Settings.
+Both executables now share this parser; the terminal client's full settings
+and keybindings are documented in [Terminal configuration](terminal/configuration.md).
+
+`calendar_default_view` (`month`, `week`, `day`, `agenda`) and
+`calendar_week_start` (`monday`, `sunday`) in `[options]` apply to both calendars.
+GUI keybindings remain as listed in its usage guide; `[keybindings]` controls
+the terminal interface.
 
 ## One account
 

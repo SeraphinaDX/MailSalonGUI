@@ -19,6 +19,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/assets"
+	"github.com/SeraphinaDX/MailSalonGUI/internal/version"
 
 	"github.com/SeraphinaDX/MailSalonGUI/internal/config"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/maildir"
@@ -27,7 +28,7 @@ import (
 	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
 )
 
-const Version = "0.2.1"
+const Version = version.GUI
 
 type App struct {
 	Fyne                               fyne.App

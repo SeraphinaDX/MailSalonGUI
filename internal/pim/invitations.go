@@ -22,6 +22,8 @@ import (
 type CalendarEvent struct {
 	Item
 	Method, Organizer, Status string
+	EndZone                   string
+	Attendees                 []string
 	AllDay                    bool
 	root                      *calendarComponent
 }
@@ -97,9 +99,8 @@ func (c *calendarComponent) lines() []string {
 	return append(out, "END:"+c.name)
 }
 
-// ParseCalendar splits multiple events by UID while retaining recurrence
-// exceptions. A malformed calendar does not prevent saving the mail attachment.
-func ParseCalendar(data []byte, mimeMethod string) ([]CalendarEvent, error) {
+// parseCalendarTree decodes one calendar without modifying source bytes.
+func parseCalendarTree(data []byte) (*calendarComponent, error) {
 	var root *calendarComponent
 	var stack []*calendarComponent
 	for _, line := range unfold(bytes.TrimPrefix(data, []byte{0xef, 0xbb, 0xbf})) {
@@ -141,6 +142,15 @@ func ParseCalendar(data []byte, mimeMethod string) ([]CalendarEvent, error) {
 	if root == nil || len(stack) != 0 {
 		return nil, errors.New("incomplete calendar")
 	}
+	return root, nil
+}
+
+// ParseCalendar groups event UIDs and their exceptions, retaining source properties.
+func ParseCalendar(data []byte, mimeMethod string) ([]CalendarEvent, error) {
+	root, err := parseCalendarTree(data)
+	if err != nil {
+		return nil, err
+	}
 	if root.value("VERSION") != "2.0" || len(root.values("VERSION")) != 1 {
 		return nil, errors.New("calendar needs VERSION:2.0")
 	}
@@ -171,6 +181,20 @@ func ParseCalendar(data []byte, mimeMethod string) ([]CalendarEvent, error) {
 		}
 		if c.value("DTEND") != "" && c.value("DURATION") != "" {
 			return nil, errors.New("event has both end time and duration")
+		}
+		for _, key := range []string{"DTSTART", "DTEND", "RECURRENCE-ID"} {
+			for _, p := range c.values(key) {
+				valid := false
+				for _, layout := range []string{"20060102", "20060102T150405", "20060102T150405Z"} {
+					if date, err := time.Parse(layout, p.value); err == nil && date.Format(layout) == p.value {
+						valid = true
+						break
+					}
+				}
+				if !valid {
+					return nil, fmt.Errorf("invalid %s", key)
+				}
+			}
 		}
 		if seq := c.value("SEQUENCE"); seq != "" {
 			n, err := strconv.Atoi(seq)
@@ -243,10 +267,34 @@ func ParseCalendar(data []byte, mimeMethod string) ([]CalendarEvent, error) {
 				item.Zone = "All day (end date exclusive)"
 			}
 		}
-		out = append(out, CalendarEvent{Item: item, Method: method, Organizer: main.value("ORGANIZER"), Status: main.value("STATUS"), AllDay: allDay, root: group})
+		e := CalendarEvent{Item: item, Method: method, Status: main.value("STATUS"), AllDay: allDay, root: group}
+		if ps := main.values("ORGANIZER"); len(ps) > 0 {
+			e.Organizer = calendarPerson(ps[0])
+		}
+		for _, p := range main.values("ATTENDEE") {
+			e.Attendees = append(e.Attendees, calendarPerson(p))
+		}
+		if ps := main.values("DTEND"); len(ps) > 0 {
+			e.EndZone = ps[0].param("TZID")
+			if strings.HasSuffix(ps[0].value, "Z") {
+				e.EndZone = "UTC"
+			}
+		}
+		out = append(out, e)
 	}
 	return out, nil
 }
+
+func calendarPerson(p calendarProperty) string {
+	address := strings.TrimPrefix(p.value, "mailto:")
+	if a, err := mail.ParseAddress(address); err == nil {
+		a.Name = p.param("CN")
+		return a.String()
+	}
+	return p.value
+}
+
+func (e CalendarEvent) CanImport() error { _, err := e.ImportData(); return err }
 
 func calendarEmail(value string) (string, error) {
 	if len(value) < 7 || !strings.EqualFold(value[:7], "mailto:") {
@@ -352,6 +400,9 @@ func (e CalendarEvent) ImportData() ([]byte, error) {
 			continue
 		}
 		start := c.value("DTSTART")
+		if start == "" && c.value("RECURRENCE-ID") != "" && strings.EqualFold(c.value("STATUS"), "CANCELLED") {
+			continue
+		}
 		valid := false
 		for _, layout := range []string{"20060102", "20060102T150405", "20060102T150405Z"} {
 			if _, err := time.Parse(layout, start); err == nil {

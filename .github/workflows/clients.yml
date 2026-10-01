@@ -1,0 +1,27 @@
+name: Both clients
+on: [push, pull_request]
+jobs:
+  terminal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make test-tui build-tui
+      - name: Check terminal graphics isolation
+        run: |
+          if CGO_ENABLED=0 go list -deps ./cmd/MailSalon | grep -E '^(fyne.io/|github.com/go-gl/)'; then
+            echo 'Terminal imports graphics packages' >&2
+            exit 1
+          fi
+      - run: CGO_ENABLED=0 GOOS=windows go build -o MailSalon.exe ./cmd/MailSalon
+  shared-and-gui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make test check
+      - run: go test -race -tags ci ./internal/ui ./internal/gui ./internal/pim ./internal/mimeutil

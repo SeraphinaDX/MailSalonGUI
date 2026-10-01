@@ -1,4 +1,6 @@
 /MailSalonGUI
 /MailSalonGUI.exe
+/MailSalon
+/MailSalon.exe
 /config.toml
 *.log

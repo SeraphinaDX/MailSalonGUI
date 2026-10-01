@@ -23,8 +23,18 @@ type Occurrence struct {
 	Item                   Item
 	Start, End             time.Time
 	AllDay                 bool
+	Recurring              bool
 	Title, Location, Notes string
 }
+
+// Intersects tests the half-open display interval, including point events.
+func (o Occurrence) Intersects(from, to time.Time) bool {
+	if !o.End.After(o.Start) {
+		return !o.Start.Before(from) && o.Start.Before(to)
+	}
+	return o.Start.Before(to) && o.End.After(from)
+}
+
 type CalendarIssue struct {
 	Item   Item
 	Reason string
@@ -230,7 +240,38 @@ func componentSchedule(c *calendarComponent, fallback *time.Location, inherited 
 }
 
 func scheduleICS(item Item, zone *time.Location) ([]*scheduledEvent, error) {
-	calendars, err := ParseCalendar(item.Data, "")
+	root, err := parseCalendarTree(item.Data)
+	if err != nil {
+		return nil, err
+	}
+	// Dated VTODO resources also appear on the terminal calendar. Project their
+	// date properties as events while preserving the original Item and bytes.
+	projected := &calendarComponent{name: root.name, props: root.props}
+	for _, c := range root.children {
+		if c.name != "VTODO" {
+			projected.children = append(projected.children, c)
+			continue
+		}
+		task := &calendarComponent{name: "VEVENT", children: c.children}
+		hasStart := c.value("DTSTART") != ""
+		for _, p := range c.props {
+			if p.name == "DUE" {
+				if hasStart {
+					p.name = "DTEND"
+				} else {
+					p.name = "DTSTART"
+				}
+				p.line = p.name
+				if len(p.params) > 0 {
+					p.line += ";" + strings.Join(p.params, ";")
+				}
+				p.line += ":" + p.value
+			}
+			task.props = append(task.props, p)
+		}
+		projected.children = append(projected.children, task)
+	}
+	calendars, err := ParseCalendar(serialize(projected.lines()), "")
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +428,7 @@ func expandEvent(ctx context.Context, item Item, e *scheduledEvent, from, to tim
 			if title == "" {
 				title = item.Title
 			}
-			out = append(out, Occurrence{Item: item, Start: start.In(from.Location()), End: end.In(from.Location()), AllDay: event.allDay, Title: title, Location: event.location, Notes: event.notes})
+			out = append(out, Occurrence{Item: item, Start: start.In(from.Location()), End: end.In(from.Location()), AllDay: event.allDay, Recurring: item.Recurring || len(e.rules) > 0 || len(e.dates) > 0 || len(e.overrides) > 0, Title: title, Location: event.location, Notes: event.notes})
 		}
 	}
 	for key, start := range starts {
