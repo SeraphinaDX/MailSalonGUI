@@ -1,5 +1,18 @@
 # Validation
 
+## 0.1.3
+
+- Keypad regression tests cover Fyne's unknown, period and comma events for
+  the same physical . / Del key, confirming deletion of the selected email.
+- Tests also cover ordinary punctuation, unrelated keys, missing scan codes,
+  unavailable keypad mappings and search-field focus without mail deletion.
+- The keypad scan code is resolved through Fyne's existing GLFW backend;
+  no platform-specific scan-code constants are used.
+- `go test -race -tags ci ./...`, `go vet -tags ci ./...`, `go mod tidy -diff`
+  and the native Linux build passed with Go 1.24.9 and Fyne 2.7.0.
+- Native physical keyboard input requires checking on a real desktop. The
+  tests inject the native keypad lookup into Fyne's software test driver.
+
 ## 0.1.2
 
 - New tests reproduce missing keyboard selection through Fyne's embedded

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3
+
+- Recognize the numpad . / Del key in the focused message list using its native
+  scan code, including when Fyne reports an unknown key, period or comma.
+- Ordinary punctuation keys and editable fields retain their existing behavior.
+
 ## 0.1.2
 
 - Track keyboard selection when Fyne's built-in list items select a message.

@@ -26,7 +26,7 @@ import (
 	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
 )
 
-const Version = "0.1.2"
+const Version = "0.1.3"
 
 type App struct {
 	Fyne                               fyne.App
