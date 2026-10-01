@@ -22,6 +22,13 @@ set. Selection changes increment a revision so an open confirmation or queued
 action cannot follow a different selection. Filtering remaps selected paths
 onto visible rows, and folder/account reloads clear selection.
 
+Message-list letters use `TypedRune`, while navigation/Delete use `TypedKey`.
+Desktop drivers deliver both events for printable keys; handling letters once
+avoids duplicate actions. `mail_shortcuts.go` checks list focus, the active Mail
+tab, overlays and single-message eligibility before calling existing actions.
+Ctrl/Alt/Super combinations stay on the shortcut path; Shift+r arrives as `R`.
+Keep the in-app Help text and usage shortcut table in sync when adding keys.
+
 Bulk operations capture immutable entries on the event goroutine, wait for any
 automatic mark-read rename, then run sequentially in one worker. Explicit flag
 changes invalidate pending parses so they cannot undo mark-unread. Flag changes
