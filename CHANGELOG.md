@@ -1,0 +1,12 @@
+# Changelog
+
+## 0.1.0
+
+- Independent MailSalonGUI codebase in Go and Fyne.
+- Resizable mail panes, account selector, folder search and plain text previews.
+- Compose, reply, reply all, forward with original attachments, and local drafts.
+- Attachment saving, read/unread flags, archive, Trash and permanent deletion.
+- TOML settings editor, periodic background sync and per-account send commands.
+- Contacts and calendar browsing, creation, source editing and deletion.
+- Optional GnuPG sign/encrypt, decrypt/verify and message security status.
+- Disposable offline demo and documented zgo-aware build commands.

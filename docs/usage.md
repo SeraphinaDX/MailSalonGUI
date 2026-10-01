@@ -1,0 +1,81 @@
+# Everyday use
+
+## Mail
+
+Select an account and folder. Messages appear newest first. Unread messages
+have a dot and bold subject. Selecting a message marks it read after successful
+parsing. Use **Read / unread** to change the flag manually. Drag pane dividers
+for a wider list or preview. Search matches sender and subject in this folder.
+
+HTML mail is displayed as text. The reader does not load remote images or run
+web content. **Copy body** copies the displayed text; **Source** shows and copies
+the original MIME message. Each attachment has a Save button and a file dialog.
+The dialog initially opens the account's download directory when it exists.
+
+**Archive** moves a message into the existing configured archive folder.
+**Delete** asks for confirmation and moves it to Trash. Deleting a message
+already in Trash asks for confirmation before permanently removing it.
+Sync with your configured tool to propagate local changes.
+
+## Compose and drafts
+
+**Compose** opens an independent window. Choose From, enter To/Cc/Bcc, subject
+and body, and attach files. Recipient fields accept comma-separated RFC mail
+addresses. Use the contact button next to a recipient field to find and insert
+an address from that account's books or shared books.
+
+Reply chooses the account addressed in To, then Cc, falling back to the active
+account. It uses Reply-To when present. Reply all omits your own configured
+identities and removes duplicate recipients. Forwards include original
+attachments, which can be removed individually.
+
+**Save draft** stores the current fields and attachment references locally.
+Forwarded attachments are stored with the draft. Attached local files must
+still exist when you send. The draft directory sits beside the GUI's default
+configuration in `mailsalongui/drafts`; custom `-config` paths do not change it.
+Drafts are private files, with no password encryption, and are not synced to a
+remote Drafts folder. Saving does not send mail.
+
+**Drafts** in the main window lets you reopen or delete saved drafts. A draft
+whose account has been removed cannot be sent until that account is restored.
+Closing a compose window offers Save and close, Discard, or Keep editing.
+Quitting with open compositions prompts to save all of them as local drafts.
+
+Sending asks for confirmation. Wait for completion; the window cannot be closed
+while sending. Success removes the saved draft. Failure retains the composition
+and displays the command error. A timeout can occur after a server accepted the
+message, so check Sent before manually retrying an uncertain delivery.
+MailSalonGUI does not add a second Sent copy; the sender/server owns sent-mail
+storage. Bcc headers are supplied to the send tool so it can derive recipients;
+that tool must remove Bcc before transmission (as `msmtp -t` does).
+
+## Contacts and calendar
+
+Select a collection. Search and click items for details. **New** provides a
+simple contact or single-event form. Dates are ISO `YYYY-MM-DD`, or
+`YYYY-MM-DDTHH:MM:SS` with an optional IANA timezone. An all-day end date is
+exclusive, and must be later than the start.
+
+**Edit source** opens the original vCard/iCalendar/JSON text. Keep the UID and
+properties you want to retain. Saving validates the format and refuses to
+overwrite an item changed since the editor opened. **Delete** retains a copy in
+the sync tool's local `.mss-trash` directory. Calendar recurrence data is
+preserved but no recurring agenda is expanded in this release.
+
+A view without configured collections explains how to add them in TOML and
+leaves its list empty. It is safe to use mail without contacts or calendars.
+
+## Shortcuts
+
+| Context | Shortcut | Action |
+| --- | --- | --- |
+| Main window | Ctrl+N | New message |
+| Main window | Ctrl+R | Reply to selected message |
+| Main window | Ctrl+F | Focus mail search |
+| Main window | F5 | Sync |
+| Compose | Ctrl+S | Save local draft |
+| Compose | Ctrl+Enter | Confirm sending |
+| Editable fields | Ctrl+A/C/X/V | Select, copy, cut, paste |
+| Widgets | Tab / Shift+Tab | Move input focus |
+
+Fyne manages caret focus, so only the active editable field shows its cursor.
