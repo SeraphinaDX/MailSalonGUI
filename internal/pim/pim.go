@@ -111,11 +111,12 @@ func Parse(c config.Collection, data []byte) (Item, error) {
 		firstEvent := false
 		inMain := Contacts(c)
 		for _, line := range lines {
-			head, value, ok := strings.Cut(line, ":")
-			if !ok {
+			property, err := calendarProp(line)
+			if err != nil {
 				return i, errors.New("malformed content line")
 			}
-			key := strings.ToUpper(strings.Split(head, ";")[0])
+			value := property.value
+			key := property.name
 			if p := strings.LastIndex(key, "."); p >= 0 {
 				key = key[p+1:]
 			}
@@ -174,11 +175,7 @@ func Parse(c config.Collection, data []byte) (Item, error) {
 				}
 			case "DTSTART":
 				i.Start = readableDate(value)
-				for _, p := range strings.Split(head, ";")[1:] {
-					if strings.HasPrefix(strings.ToUpper(p), "TZID=") {
-						i.Zone = strings.Trim(p[5:], "\"")
-					}
-				}
+				i.Zone = property.param("TZID")
 				if strings.HasSuffix(value, "Z") {
 					i.Zone = "UTC"
 				}

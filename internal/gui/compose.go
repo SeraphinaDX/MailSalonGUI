@@ -80,6 +80,9 @@ func (a *App) compose(d mimeutil.Draft, index int, id string) *composer {
 		}
 	})
 	c.from.SetSelectedIndex(index)
+	if d.CalendarReplyAddress != "" {
+		c.from.Disable()
+	}
 	c.updatePGP()
 	c.attachBox = container.NewVBox()
 	c.refreshAttachments()
@@ -189,6 +192,10 @@ func (c *composer) refreshAttachments() {
 	}
 	for i, att := range c.seed.MemoryAttachments {
 		index := i
+		if c.seed.CalendarReplyAddress != "" && strings.HasPrefix(att.MIMEType, "text/calendar") {
+			c.attachBox.Add(widget.NewLabel(att.Filename + " (calendar response)"))
+			continue
+		}
 		c.attachBox.Add(container.NewBorder(nil, nil, nil, widget.NewButton("Remove", func() {
 			if c.sending {
 				return
@@ -242,6 +249,9 @@ func (c *composer) setSending(b bool) {
 	} else {
 		c.from.Enable()
 		c.sendButton.Enable()
+		if c.seed.CalendarReplyAddress != "" {
+			c.from.Disable()
+		}
 		c.saveButton.Enable()
 		c.attachButton.Enable()
 		if c.app.cfg.Accounts[c.account].GPG.Enabled {

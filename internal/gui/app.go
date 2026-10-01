@@ -27,7 +27,7 @@ import (
 	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
 )
 
-const Version = "0.1.8"
+const Version = "0.1.9"
 
 type App struct {
 	Fyne                               fyne.App
@@ -148,7 +148,7 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 			a.Window.Clipboard().SetContent(a.parsed.DisplayText())
 		}
 	}), widget.NewButton("Source", a.showSource))
-	preview := container.NewBorder(container.NewVBox(readActions, manageActions, widget.NewSeparator(), a.headers, a.security), container.NewVScroll(a.attachments), nil, nil, container.NewVScroll(a.body))
+	preview := container.NewBorder(container.NewVBox(readActions, manageActions, widget.NewSeparator(), a.headers, a.security), nil, nil, nil, container.NewVScroll(container.NewVBox(a.body, a.attachments)))
 	reader := container.NewHSplit(container.NewBorder(a.search, a.summary, nil, nil, a.messageList), preview)
 	reader.Offset = 0.40
 	mailPane := container.NewHSplit(container.NewBorder(widget.NewLabelWithStyle("Folders", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), nil, nil, nil, a.folderList), reader)
@@ -361,6 +361,7 @@ func (a *App) loadMessage(id int, autoRead bool) {
 	token := a.reading
 	gen := a.generation
 	acc := a.cfg.Accounts[a.account]
+	account := a.account
 	e := a.messages[id]
 	a.selected = id
 	a.parsed = nil
@@ -397,6 +398,9 @@ func (a *App) loadMessage(id int, autoRead bool) {
 			a.Window.Content().Refresh()
 			for _, attachment := range p.Attachments {
 				att := attachment
+				if card := a.calendarAttachment(att, p, account); card != nil {
+					a.attachments.Add(card)
+				}
 				a.attachments.Add(widget.NewButtonWithIcon(fmt.Sprintf("Save %s (%d bytes)", att.Filename, len(att.Data)), theme.DownloadIcon(), func() { a.saveAttachment(att, acc.DownloadDir) }))
 			}
 			if autoRead && e.Unread && len(a.messageList.selection) == 1 && a.messageList.selection[id] {

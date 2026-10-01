@@ -104,6 +104,38 @@ preserved but no recurring agenda is expanded in this release.
 A view without configured collections explains how to add them in TOML and
 leaves its list empty. It is safe to use mail without contacts or calendars.
 
+### Calendar invitations in mail
+
+Named `.ics` attachments and inline `text/calendar` parts appear as event cards
+below the mail body, even without a filename. Cards show the event title, start,
+end/duration, timezone, location, organizer, description and recurrence status.
+All-day end dates are exclusive. Timezone values stay as supplied by the sender;
+custom timezone definitions and recurrence rules are preserved in the source.
+Attachments remain available to save, including calendars that cannot be parsed.
+Calendars containing multiple UIDs get a separate card for each event; recurrence
+exceptions stay with their series.
+
+**Add to Calendar** opens a chooser for CalDAV collections available to the
+current mail account. Saving writes a local `.ics` resource for MailSalonSync
+to upload on the next sync. It retains the UID, timezone definitions, recurrence
+exceptions, alarms and event extensions, and removes the scheduling `METHOD`
+property required only for emailed calendar messages. An existing UID asks
+before replacing its source; a changed file or busy sync prevents replacement.
+Instance-only updates cannot replace a full recurring series; merge those using
+**Edit source**. JMAP calendar JSON conversion is not supported. Without a
+CalDAV collection, save the attachment for use in another calendar application.
+
+**Accept… / Decline…** opens an ordinary mail draft addressed to the calendar
+organizer with a `METHOD:REPLY` attachment and the chosen participation status.
+Review it and press **Send** to notify the organizer through the account's usual
+send command. Nothing is sent by opening the draft. The From account is fixed
+to the matching invited attendee, including after saving/reopening the draft.
+Adding the event locally is a separate action and does not send an RSVP.
+Responses require an active `REQUEST` invitation and a matching account From
+address; delegated invitations are not handled. Cancellation messages are
+shown but do not automatically remove events, and cannot be imported or replied
+to with Accept/Decline. Replies from other attendees are previewed only.
+
 ## Shortcuts
 
 | Context | Shortcut | Action |

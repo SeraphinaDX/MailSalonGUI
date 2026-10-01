@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.9
+
+- Detect named iCalendar attachments and inline calendar MIME parts without
+  filenames; show event details alongside the mail body.
+- Import events into local CalDAV collections with UID duplicate confirmation,
+  sync-lock/stale-file guards and preserved timezone/recurrence/source fields.
+- Prepare Accept/Decline reply drafts for matching invited accounts, retaining
+  event identifiers and sequence with correct calendar reply MIME parameters.
+- Keep cancellations, unsupported calendar formats and delegated invitations
+  visible without applying unsupported scheduling actions.
+
 ## 0.1.8
 
 - Replace regex HTML stripping with HTML parsing and a formatted Fyne preview
