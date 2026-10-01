@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Track keyboard selection when Fyne's built-in list items select a message.
+- Accept Delete and Backspace in the focused message list.
+- Preserve deletion requests and confirmations during automatic mark-read renames.
+
 ## 0.1.1
 
 - Delete in the focused message list opens the existing deletion confirmation.

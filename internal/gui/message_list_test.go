@@ -154,7 +154,9 @@ func TestStaleContextActionCannotDeleteNewSelection(t *testing.T) {
 }
 func TestRowClickAndKeyboardNavigationUseSameSelection(t *testing.T) {
 	a, q := demoApp(t)
-	test.Tap(visibleMessageRow(t, a, 2))
+	row := visibleMessageRow(t, a, 2)
+	pos := a.Fyne.Driver().AbsolutePositionForObject(row)
+	test.TapCanvas(a.Window.Canvas(), pos.Add(fyne.NewPos(10, 10)))
 	waitForMessage(t, a, q)
 	if a.Window.Canvas().Focused() != a.messageList || a.selected != 2 {
 		t.Fatal("row tap did not focus and select mail")
@@ -173,6 +175,89 @@ func TestRowClickAndKeyboardNavigationUseSameSelection(t *testing.T) {
 	waitForMessage(t, a, q)
 	if a.selected != 4 {
 		t.Fatal("End did not select last row")
+	}
+}
+
+func TestNativeListSelectionUpdatesDeleteAndNavigation(t *testing.T) {
+	a, q := demoApp(t)
+	// Fyne's internal listItem invokes the embedded List.Select, not our
+	// override. Exercise that entry point rather than selecting via the app.
+	a.messageList.List.Select(2)
+	a.Window.Canvas().Focus(a.messageList)
+	waitForMessage(t, a, q)
+	if a.messageList.selectedID != 2 || a.selected != 2 {
+		t.Fatal("native list selection did not update keyboard selection")
+	}
+	a.Window.Canvas().Focused().TypedKey(&fyne.KeyEvent{Name: fyne.KeyDown})
+	waitForMessage(t, a, q)
+	if a.selected != 3 {
+		t.Fatal("navigation did not follow native list selection")
+	}
+	a.Window.Canvas().Focused().TypedKey(&fyne.KeyEvent{Name: fyne.KeyDelete})
+	if a.Window.Canvas().Overlays().Top() == nil {
+		t.Fatal("Delete after native selection did not show confirmation")
+	}
+}
+
+func TestBackspaceDeletesOnlyFromFocusedMessageList(t *testing.T) {
+	a, q := demoApp(t)
+	a.selectMessage(0)
+	waitForMessage(t, a, q)
+	a.Window.Canvas().Focus(a.search)
+	a.Window.Canvas().Focused().TypedKey(&fyne.KeyEvent{Name: fyne.KeyBackspace})
+	if a.Window.Canvas().Overlays().Top() != nil {
+		t.Fatal("Backspace in search opened mail deletion")
+	}
+	a.Window.Canvas().Focus(a.messageList)
+	a.Window.Canvas().Focused().TypedKey(&fyne.KeyEvent{Name: fyne.KeyBackspace})
+	tapConfirmation(t, a.Window)
+	pump(t, q, func() bool { return !a.changing && len(a.messages) == 4 })
+}
+
+func TestDeleteWhileMarkingReadPreservesRequest(t *testing.T) {
+	a, q := demoApp(t)
+	a.selectMessage(0)
+	pump(t, q, func() bool { return a.changingRead })
+	a.Window.Canvas().Focused().TypedKey(&fyne.KeyEvent{Name: fyne.KeyDelete})
+	if a.pendingDelete == nil {
+		t.Fatal("Delete during mark-read was discarded")
+	}
+	pump(t, q, func() bool { return a.Window.Canvas().Overlays().Top() != nil })
+	tapConfirmation(t, a.Window)
+	pump(t, q, func() bool { return !a.changing && len(a.messages) == 4 })
+}
+
+func TestDeleteConfirmationDuringMarkReadUsesRenamedPath(t *testing.T) {
+	a, q := demoApp(t)
+	a.selectMessage(0)
+	a.messageList.TypedKey(&fyne.KeyEvent{Name: fyne.KeyDelete})
+	pump(t, q, func() bool { return a.changingRead })
+	tapConfirmation(t, a.Window)
+	pump(t, q, func() bool { return !a.changing && len(a.messages) == 4 })
+}
+
+func TestPendingDeleteCannotFollowFolderChange(t *testing.T) {
+	a, q := demoApp(t)
+	a.selectMessage(0)
+	pump(t, q, func() bool { return a.changingRead })
+	a.messageList.TypedKey(&fyne.KeyEvent{Name: fyne.KeyDelete})
+	a.search.SetText("Coffee")
+	pump(t, q, func() bool { return !a.changing })
+	if a.pendingDelete != nil || a.Window.Canvas().Overlays().Top() != nil {
+		t.Fatal("pending Delete survived a changed message selection")
+	}
+}
+
+func TestPendingDeleteCannotTargetDifferentHighlightedMail(t *testing.T) {
+	a, q := demoApp(t)
+	a.selectMessage(0)
+	pump(t, q, func() bool { return a.changingRead })
+	a.messageList.TypedKey(&fyne.KeyEvent{Name: fyne.KeyDelete})
+	// Selection can change before openMessage accepts the next preview.
+	a.messageList.List.Select(2)
+	pump(t, q, func() bool { return !a.changing })
+	if a.pendingDelete != nil || a.Window.Canvas().Overlays().Top() != nil {
+		t.Fatal("pending Delete targeted mail other than the highlighted row")
 	}
 }
 

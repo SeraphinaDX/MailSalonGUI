@@ -26,7 +26,7 @@ import (
 	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
 )
 
-const Version = "0.1.1"
+const Version = "0.1.2"
 
 type App struct {
 	Fyne                               fyne.App
@@ -54,6 +54,8 @@ type App struct {
 	syncButton                         *widget.Button
 	progress                           *widget.ProgressBarInfinite
 	syncing, changing                  bool
+	changingRead                       bool
+	pendingDelete                      func()
 	generation, reading                uint64
 	composers                          map[*composer]bool
 	log                                string
@@ -116,7 +118,7 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 		row.subject.SetText(text)
 		row.meta.SetText(e.From + "  ·  " + e.Date.Format("Jan 02 15:04"))
 	}, a.deleteMessage)
-	a.messageList.OnSelected = func(id widget.ListItemID) { a.openMessage(id) }
+	a.messageList.onSelected = a.openMessage
 	readActions := container.NewHBox(
 		widget.NewButtonWithIcon("Reply", theme.MailReplyIcon(), func() { a.reply(false, false) }),
 		widget.NewButton("Reply all", func() { a.reply(false, true) }),
@@ -383,6 +385,7 @@ func (a *App) changeRead(e maildir.Entry, read bool) {
 		return
 	}
 	a.changing = true
+	a.changingRead = true
 	a.updateMessageMenu()
 	gen := a.generation
 	old := e.Path
@@ -395,6 +398,9 @@ func (a *App) changeRead(e maildir.Entry, read bool) {
 		}
 		a.post(func() {
 			a.changing = false
+			a.changingRead = false
+			pending := a.pendingDelete
+			a.pendingDelete = nil
 			defer a.updateMessageMenu()
 			if err != nil {
 				a.fail(err)
@@ -421,6 +427,9 @@ func (a *App) changeRead(e maildir.Entry, read bool) {
 				}
 			}
 			a.summary.SetText(fmt.Sprintf("%d messages · %d unread · %d shown", len(a.all), unread, len(a.messages)))
+			if pending != nil {
+				pending()
+			}
 		})
 	}()
 }
@@ -449,6 +458,25 @@ func (a *App) archive() {
 	a.mutateMessage(e, func() error { return maildir.Archive(e, folder) })
 }
 func (a *App) deleteMessage() {
+	gen, reading, id := a.generation, a.reading, a.selected
+	a.afterReadChange(func() {
+		if gen == a.generation && reading == a.reading && id == a.selected && id == a.messageList.selectedID {
+			a.confirmDeleteMessage()
+		}
+	})
+}
+
+// Reading unread mail renames it from new/ to cur/. Preserve a Delete request
+// during that operation, then resolve the current path after the rename.
+func (a *App) afterReadChange(fn func()) {
+	if a.changingRead {
+		a.pendingDelete = fn
+		return
+	}
+	fn()
+}
+
+func (a *App) confirmDeleteMessage() {
 	e, ok := a.currentEntry()
 	if !ok {
 		return
@@ -471,16 +499,17 @@ func (a *App) deleteMessage() {
 		if !yes {
 			return
 		}
-		if gen != a.generation || reading != a.reading || id != a.selected {
-			return
-		}
-		// Opening the preview may have renamed new/ mail into cur/ while the
-		// confirmation was open. Use the current entry rather than the old path.
-		current, ok := a.currentEntry()
-		if !ok {
-			return
-		}
-		a.mutateMessage(current, func() error { return maildir.Delete(current, trash) })
+		a.afterReadChange(func() {
+			if gen != a.generation || reading != a.reading || id != a.selected || id != a.messageList.selectedID {
+				return
+			}
+			// The preview may rename the mail while confirmation is open.
+			current, ok := a.currentEntry()
+			if !ok {
+				return
+			}
+			a.mutateMessage(current, func() error { return maildir.Delete(current, trash) })
+		})
 	}, a.Window)
 }
 func (a *App) mutateMessage(e maildir.Entry, fn func() error) {
