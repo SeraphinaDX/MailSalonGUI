@@ -26,7 +26,7 @@ import (
 	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
 )
 
-const Version = "0.1.3"
+const Version = "0.1.4"
 
 type App struct {
 	Fyne                               fyne.App
@@ -172,6 +172,8 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 	a.Window.SetContent(container.NewBorder(container.NewVBox(toolbar, widget.NewSeparator()), container.NewVBox(a.progress, a.status), nil, nil, a.tabs))
 	a.Window.SetMainMenu(fyne.NewMainMenu(fyne.NewMenu("File", fyne.NewMenuItem("Compose", func() { a.compose(mimeutil.Draft{}, a.account, "") }), fyne.NewMenuItem("Saved drafts", a.showDrafts), fyne.NewMenuItem("Settings", a.settings), fyne.NewMenuItemSeparator(), fyne.NewMenuItem("Quit", a.requestClose)), fyne.NewMenu("Help", fyne.NewMenuItem("About", func() {
 		dialog.ShowInformation("MailSalonGUI "+Version, "A Go/Fyne mail, contacts and calendar client.\nLocal Maildirs • External sync/send • GPL-3.0\n\nConfiguration: "+a.configPath, a.Window)
+	}), fyne.NewMenuItem("Keyboard diagnostic", func() {
+		newKeyboardInspectorWindow(a.Fyne, a.messageList.keypadDeleteScanCode)
 	}))))
 	a.Window.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyN, Modifier: fyne.KeyModifierControl}, func(fyne.Shortcut) { a.compose(mimeutil.Draft{}, a.account, "") })
 	a.Window.Canvas().AddShortcut(&desktop.CustomShortcut{KeyName: fyne.KeyR, Modifier: fyne.KeyModifierControl}, func(fyne.Shortcut) { a.reply(false, false) })

@@ -1,7 +1,7 @@
 # MailSalonGUI
 
 A standalone desktop version of MailSalon, written in **Go and Fyne**.
-Version **0.1.3**. Its codebase, executable and configuration path are independent
+Version **0.1.4**. Its codebase, executable and configuration path are independent
 of the terminal client. It reads the same local Maildirs and contact/calendar
 files and supports MailSalon's TOML account settings.
 

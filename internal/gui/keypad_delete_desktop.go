@@ -6,9 +6,12 @@ package gui
 
 import "github.com/go-gl/glfw/v3.3/glfw"
 
-// Use the same GLFW backend as Fyne to resolve the native scan code. Hard-coded
-// scan codes differ across operating systems and keyboard configurations.
-// Called from keyboard handling after Fyne has initialized GLFW.
+// Called from keyboard handling after Fyne has initialized GLFW. X11 can map
+// multiple physical keys to GLFW's KP_DECIMAL token; its reverse lookup then
+// returns only the last one, which may be KPPT instead of the . / Del key.
 func keypadDeleteScanCode() int {
+	if code := x11KeypadDeleteScanCode(); code > 0 {
+		return code
+	}
 	return glfw.GetKeyScancode(glfw.KeyKPDecimal)
 }
