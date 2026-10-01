@@ -214,6 +214,60 @@ func TestBackspaceDeletesOnlyFromFocusedMessageList(t *testing.T) {
 	pump(t, q, func() bool { return !a.changing && len(a.messages) == 4 })
 }
 
+func TestKeypadDeleteUsesPhysicalKeyAndFocusedList(t *testing.T) {
+	// Native scan codes vary by OS and keyboard layout. Inject the GLFW lookup
+	// and exercise the event names Fyne can emit for the same physical key.
+	const keypadScanCode = 400
+	for _, tc := range []struct {
+		name       string
+		key        fyne.KeyName
+		scanCode   int
+		resolved   int
+		wantDelete bool
+	}{
+		{"unknown keypad key", fyne.KeyUnknown, keypadScanCode, keypadScanCode, true},
+		{"keypad period", fyne.KeyPeriod, keypadScanCode, keypadScanCode, true},
+		{"keypad comma", fyne.KeyComma, keypadScanCode, keypadScanCode, true},
+		{"other unknown key", fyne.KeyUnknown, 401, keypadScanCode, false},
+		{"ordinary period", fyne.KeyPeriod, 401, keypadScanCode, false},
+		{"ordinary comma", fyne.KeyComma, 401, keypadScanCode, false},
+		{"missing hardware identity", fyne.KeyUnknown, 0, keypadScanCode, false},
+		{"unavailable native key", fyne.KeyUnknown, keypadScanCode, -1, false},
+		{"remapped key", fyne.KeyReturn, keypadScanCode, keypadScanCode, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, q := demoApp(t)
+			a.messageList.keypadDeleteScanCode = func() int { return tc.resolved }
+			a.messageList.List.Select(0)
+			waitForMessage(t, a, q)
+			entry := a.messages[0]
+			event := &fyne.KeyEvent{Name: tc.key, Physical: fyne.HardwareKey{ScanCode: tc.scanCode}}
+			a.Window.Canvas().Focus(a.search)
+			a.Window.Canvas().Focused().TypedKey(event)
+			if a.Window.Canvas().Overlays().Top() != nil {
+				t.Fatal("keypad event in search opened mail deletion")
+			}
+			a.Window.Canvas().Focus(a.messageList)
+			a.Window.Canvas().Focused().TypedKey(event)
+			if got := a.Window.Canvas().Overlays().Top() != nil; got != tc.wantDelete {
+				t.Fatalf("deletion confirmation = %v, want %v", got, tc.wantDelete)
+			}
+			if _, err := os.Stat(entry.Path); err != nil {
+				t.Fatal("email removed before confirmation")
+			}
+			if !tc.wantDelete {
+				return
+			}
+			tapConfirmation(t, a.Window)
+			pump(t, q, func() bool { return !a.changing && len(a.messages) == 4 })
+			trash, err := maildir.Scan(maildir.Folder{Name: "Trash", Path: filepath.Join(a.cfg.Accounts[0].Maildir, "Trash")})
+			if err != nil || len(trash) != 1 || trash[0].Subject != entry.Subject {
+				t.Fatalf("keypad Delete did not move selected email to Trash: %v", err)
+			}
+		})
+	}
+}
+
 func TestDeleteWhileMarkingReadPreservesRequest(t *testing.T) {
 	a, q := demoApp(t)
 	a.selectMessage(0)

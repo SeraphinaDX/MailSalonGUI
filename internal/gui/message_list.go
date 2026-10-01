@@ -15,10 +15,12 @@ type messageList struct {
 	selectedID int
 	onDelete   func()
 	onSelected func(int)
+	// Resolve lazily: GLFW is initialized only after a desktop window opens.
+	keypadDeleteScanCode func() int
 }
 
 func newMessageList(length func() int, create func() fyne.CanvasObject, update func(int, fyne.CanvasObject), onDelete func()) *messageList {
-	l := &messageList{selectedID: -1, onDelete: onDelete}
+	l := &messageList{selectedID: -1, onDelete: onDelete, keypadDeleteScanCode: keypadDeleteScanCode}
 	l.Length = length
 	l.CreateItem = create
 	l.UpdateItem = update
@@ -57,12 +59,13 @@ func (l *messageList) TypedKey(event *fyne.KeyEvent) {
 		return
 	}
 	id := l.selectedID
-	switch event.Name {
-	case fyne.KeyDelete, fyne.KeyBackspace:
+	if l.isDeleteKey(event) {
 		if id >= 0 && l.onDelete != nil {
 			l.onDelete()
 		}
 		return
+	}
+	switch event.Name {
 	case fyne.KeyDown:
 		if id < 0 {
 			id = 0
@@ -87,6 +90,23 @@ func (l *messageList) TypedKey(event *fyne.KeyEvent) {
 		return
 	}
 	l.Select(id)
+}
+
+func (l *messageList) isDeleteKey(event *fyne.KeyEvent) bool {
+	if event.Name == fyne.KeyDelete || event.Name == fyne.KeyBackspace {
+		return true
+	}
+	// Fyne 2.7 does not map GLFW's KP_DECIMAL key. It can arrive as an
+	// unknown key, period or comma depending on keyboard layout and platform.
+	// Match the physical keypad key, not an ordinary punctuation key.
+	switch event.Name {
+	case fyne.KeyUnknown, fyne.KeyPeriod, fyne.KeyComma:
+		if event.Physical.ScanCode > 0 && l.keypadDeleteScanCode != nil {
+			scanCode := l.keypadDeleteScanCode()
+			return scanCode > 0 && event.Physical.ScanCode == scanCode
+		}
+	}
+	return false
 }
 
 type messageRow struct {

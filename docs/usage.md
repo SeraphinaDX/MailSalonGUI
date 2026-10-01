@@ -16,6 +16,8 @@ The dialog initially opens the account's download directory when it exists.
 **Delete** asks for confirmation and moves it to Trash. Deleting a message
 already in Trash asks for confirmation before permanently removing it.
 Press **Delete** or **Backspace** with the message list focused to open the same confirmation.
+The numpad **. / Del** key also opens confirmation in the message list, with
+Num Lock on or off. In text fields it keeps its normal editing behavior.
 Right-click an email for reply/reply all, forward, mark read/unread, archive,
 delete and source actions. The menu selects the clicked email. Reply actions
 become available after its preview loads; message changes briefly disable
@@ -78,7 +80,7 @@ leaves its list empty. It is safe to use mail without contacts or calendars.
 | Main window | Ctrl+R | Reply to selected message |
 | Main window | Ctrl+F | Focus mail search |
 | Main window | F5 | Sync |
-| Message list | Delete / Backspace | Confirm deleting selected mail |
+| Message list | Delete / Backspace / numpad . / Del | Confirm deleting selected mail |
 | Message list | Up / Down / Home / End | Select a message |
 | Compose | Ctrl+S | Save local draft |
 | Compose | Ctrl+Enter | Confirm sending |
