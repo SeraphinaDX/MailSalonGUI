@@ -26,7 +26,7 @@ import (
 	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
 )
 
-const Version = "0.1.0"
+const Version = "0.1.1"
 
 type App struct {
 	Fyne                               fyne.App
@@ -37,7 +37,10 @@ type App struct {
 	cancel                             context.CancelFunc
 	account                            int
 	folders                            []maildir.Folder
-	folderList, messageList            *widget.List
+	folderList                         *widget.List
+	messageList                        *messageList
+	messageMenu                        *widget.PopUpMenu
+	messageMenuItems                   map[string]*fyne.MenuItem
 	all, messages                      []maildir.Entry
 	folderPath                         string
 	selected                           int
@@ -92,20 +95,17 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 			a.loadFolder(a.folders[id])
 		}
 	}
-	a.messageList = widget.NewList(func() int { return len(a.messages) }, func() fyne.CanvasObject {
-		subject := widget.NewLabel("")
-		subject.Truncation = fyne.TextTruncateEllipsis
-		meta := widget.NewLabel("")
-		meta.Truncation = fyne.TextTruncateEllipsis
-		return container.NewVBox(subject, meta)
-	}, func(id widget.ListItemID, o fyne.CanvasObject) {
+	a.messageList = newMessageList(func() int { return len(a.messages) }, func() fyne.CanvasObject {
+		return newMessageRow(a.selectMessage, a.showMessageMenu)
+	}, func(id int, o fyne.CanvasObject) {
+		row := o.(*messageRow)
+		row.id = -1
 		if id < 0 || id >= len(a.messages) {
 			return
 		}
+		row.id = id
 		e := a.messages[id]
-		box := o.(*fyne.Container)
-		subject := box.Objects[0].(*widget.Label)
-		subject.TextStyle = fyne.TextStyle{Bold: e.Unread}
+		row.subject.TextStyle = fyne.TextStyle{Bold: e.Unread}
 		text := e.Subject
 		if text == "" {
 			text = "(no subject)"
@@ -113,9 +113,9 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 		if e.Unread {
 			text = "●  " + text
 		}
-		subject.SetText(text)
-		box.Objects[1].(*widget.Label).SetText(e.From + "  ·  " + e.Date.Format("Jan 02 15:04"))
-	})
+		row.subject.SetText(text)
+		row.meta.SetText(e.From + "  ·  " + e.Date.Format("Jan 02 15:04"))
+	}, a.deleteMessage)
 	a.messageList.OnSelected = func(id widget.ListItemID) { a.openMessage(id) }
 	readActions := container.NewHBox(
 		widget.NewButtonWithIcon("Reply", theme.MailReplyIcon(), func() { a.reply(false, false) }),
@@ -217,6 +217,7 @@ func (a *App) fail(err error) {
 	}
 }
 func (a *App) clearPreview() {
+	a.hideMessageMenu()
 	a.reading++
 	a.selected = -1
 	a.parsed = nil
@@ -327,6 +328,7 @@ func (a *App) openMessage(id int) {
 	if id < 0 || id >= len(a.messages) || a.changing {
 		return
 	}
+	a.hideMessageMenu()
 	a.reading++
 	token := a.reading
 	gen := a.generation
@@ -372,6 +374,7 @@ func (a *App) openMessage(id int) {
 			if e.Unread {
 				a.changeRead(e, true)
 			}
+			a.updateMessageMenu()
 		})
 	}()
 }
@@ -380,6 +383,7 @@ func (a *App) changeRead(e maildir.Entry, read bool) {
 		return
 	}
 	a.changing = true
+	a.updateMessageMenu()
 	gen := a.generation
 	old := e.Path
 	go func() {
@@ -391,6 +395,7 @@ func (a *App) changeRead(e maildir.Entry, read bool) {
 		}
 		a.post(func() {
 			a.changing = false
+			defer a.updateMessageMenu()
 			if err != nil {
 				a.fail(err)
 				return
@@ -461,10 +466,21 @@ func (a *App) deleteMessage() {
 	if filepath.Clean(filepath.Dir(filepath.Dir(e.Path))) == filepath.Clean(trash.Path) {
 		text = "Permanently delete this message from Trash?"
 	}
+	gen, reading, id := a.generation, a.reading, a.selected
 	dialog.ShowConfirm("Delete message", text, func(yes bool) {
-		if yes {
-			a.mutateMessage(e, func() error { return maildir.Delete(e, trash) })
+		if !yes {
+			return
 		}
+		if gen != a.generation || reading != a.reading || id != a.selected {
+			return
+		}
+		// Opening the preview may have renamed new/ mail into cur/ while the
+		// confirmation was open. Use the current entry rather than the old path.
+		current, ok := a.currentEntry()
+		if !ok {
+			return
+		}
+		a.mutateMessage(current, func() error { return maildir.Delete(current, trash) })
 	}, a.Window)
 }
 func (a *App) mutateMessage(e maildir.Entry, fn func() error) {
