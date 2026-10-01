@@ -14,6 +14,7 @@ type messageList struct {
 	widget.List
 	selectedID int
 	onDelete   func()
+	onSelected func(int)
 }
 
 func newMessageList(length func() int, create func() fyne.CanvasObject, update func(int, fyne.CanvasObject), onDelete func()) *messageList {
@@ -21,6 +22,19 @@ func newMessageList(length func() int, create func() fyne.CanvasObject, update f
 	l.Length = length
 	l.CreateItem = create
 	l.UpdateItem = update
+	// Fyne's native list items call the embedded List.Select directly, bypassing
+	// our Select method. Track selection in the callback shared by both paths.
+	l.List.OnSelected = func(id int) {
+		l.selectedID = id
+		if l.onSelected != nil {
+			l.onSelected(id)
+		}
+	}
+	l.List.OnUnselected = func(id int) {
+		if l.selectedID == id {
+			l.selectedID = -1
+		}
+	}
 	// Extend before the List renderer is created so mouse/keyboard focus belongs
 	// to this widget and reaches its TypedKey override.
 	l.ExtendBaseWidget(l)
@@ -30,7 +44,6 @@ func (l *messageList) Select(id int) {
 	if id < 0 || id >= l.Length() {
 		return
 	}
-	l.selectedID = id
 	l.List.Select(id)
 }
 func (l *messageList) UnselectAll() { l.selectedID = -1; l.List.UnselectAll() }
@@ -45,7 +58,7 @@ func (l *messageList) TypedKey(event *fyne.KeyEvent) {
 	}
 	id := l.selectedID
 	switch event.Name {
-	case fyne.KeyDelete:
+	case fyne.KeyDelete, fyne.KeyBackspace:
 		if id >= 0 && l.onDelete != nil {
 			l.onDelete()
 		}

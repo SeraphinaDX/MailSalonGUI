@@ -1,4 +1,18 @@
-# Validation for 0.1.0
+# Validation
+
+## 0.1.2
+
+- New tests reproduce missing keyboard selection through Fyne's embedded
+  `List.Select` and missing Backspace handling on the merged 0.1.1 code.
+- Regression tests cover canvas clicks, native list selection, Delete/Backspace,
+  search-field isolation, mark-read renames during requests and confirmation,
+  and cancellation of pending actions when selection changes.
+- All package tests with the race detector, `go vet -tags ci ./...`, and the
+  native Linux build passed with Go 1.24.9 and Fyne 2.7.0.
+- Physical keyboard input still needs checking on a real desktop; this
+  environment provides Fyne's software test driver but no native GUI session.
+
+## 0.1.0
 
 Checked on Linux with Go 1.24.9 and Fyne 2.7.0.
 
