@@ -1,5 +1,18 @@
 # Validation
 
+## MailSalonGUI 0.4.1
+
+- Full software-driver tests and vet passed. Folder-click and drag-and-drop
+  regression tests passed with the race detector. Both native Linux binaries
+  built and report MailSalonGUI 0.4.1 and MailSalon 0.9.0.
+- Row-level tests reproduce desktop dispatch to the secondary-click handler's
+  widget, require primary-click support, open Sent, return to Inbox and reject
+  recycled/stale row identities. A right-click keeps the source view unchanged.
+  The new tests failed before the primary-click handler was added.
+- Fyne's software-driver TapCanvas searches only primary click handlers, unlike
+  desktop hit testing, so previous canvas-only folder clicks missed this bug.
+  Native KDE interaction was not available in the headless environment.
+
 ## MailSalonGUI 0.4.0
 
 - Full software-driver tests and vet passed. GUI/transport/config race tests

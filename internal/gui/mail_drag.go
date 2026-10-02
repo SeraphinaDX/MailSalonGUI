@@ -171,6 +171,16 @@ func (r *folderRow) MouseOut() {
 	}
 }
 
+// Fyne's desktop hit testing selects this row for both mouse buttons because
+// it implements SecondaryTappable. Forward primary taps to the list so its
+// selection highlight and OnSelected callback still run.
+func (r *folderRow) Tapped(*fyne.PointEvent) {
+	if r.app.mailDrag != nil || r.id < 0 || r.id >= len(r.app.folders) || r.path != r.app.folders[r.id].Path {
+		return
+	}
+	r.app.folderList.Select(r.id)
+}
+
 func (r *folderRow) TappedSecondary(event *fyne.PointEvent) {
 	menu := fyne.NewMenu("Folders", fyne.NewMenuItem("New folder…", func() { r.app.showFolderManager(true) }), fyne.NewMenuItem("Manage subscriptions…", func() { r.app.showFolderManager(false) }))
 	widget.ShowPopUpMenuAtPosition(menu, r.app.Window.Canvas(), event.AbsolutePosition)

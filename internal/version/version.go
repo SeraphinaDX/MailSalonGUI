@@ -2,6 +2,6 @@
 
 package version
 
-const GUI = "0.4.0"
+const GUI = "0.4.1"
 const Terminal = "0.9.0"
 const Version = Terminal

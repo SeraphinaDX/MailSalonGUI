@@ -1,7 +1,7 @@
 # MailSalon and MailSalonGUI
 
 One Go codebase with two interfaces: **MailSalon**, the gotui terminal client
-(version **0.9.0**), and **MailSalonGUI**, the Fyne desktop client (version **0.4.0**).
+(version **0.9.0**), and **MailSalonGUI**, the Fyne desktop client (version **0.4.1**).
 Both use the same Maildir, MIME, TOML, transport, OpenPGP and contacts/calendar
 packages. Each retains its own executable, configuration path and interface.
 
