@@ -21,6 +21,14 @@ replacement. Both use the same collection locking and atomic writer.
 
 ## Window and worker ownership
 
+`folders.go` captures an account for a folder-manager window and runs typed
+MailSalonSync requests in workers. `internal/transport/folders.go` invokes the
+binary directly, with JSON stdin, and validates the response version/account/root.
+`folderBusy` serializes these requests against GUI sync, drag and bulk workers.
+Closed windows cancel requests and ignore late UI updates; mutations refresh
+the original account's local folders even after a partial error. Credentials
+and persistent managed mappings belong to MailSalonSync, not the GUI.
+
 Fyne callbacks own GUI state. Scanning Maildirs, parsing messages, running
 commands and loading collections happen in workers. Inputs are captured before
 a worker starts. Results pass through `App.post`, which uses `fyne.Do` to return

@@ -1,5 +1,15 @@
 # Changelog
 
+## MailSalonGUI 0.4.0
+
+- Create remote folders and subscribe/unsubscribe through MailSalonSync 0.7.0+
+  from the folder pane, its context menu and a dedicated folder manager.
+- Show server subscription and local syncing separately; offer parent selection
+  and optional local paths. Keep cached mail when unsubscribing.
+- Bind operations to an explicit sync account/config/executable, verify its
+  Maildir root, send names as JSON on stdin, and guard overlapping mail actions.
+- Add setup, protocol integration, worker and confirmation regression tests.
+
 ## MailSalonGUI 0.3.1
 
 - Drag messages from the email list onto existing folders in the current account.

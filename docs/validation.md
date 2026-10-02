@@ -1,5 +1,25 @@
 # Validation
 
+## MailSalonGUI 0.4.0
+
+- Full software-driver tests and vet passed. GUI/transport/config race tests
+  and pure-Go terminal/core tests passed. Both native Linux executables built
+  and report MailSalonGUI 0.4.0 and MailSalon 0.9.0.
+- GUI tests cover the remote folder list, action eligibility, new-folder form
+  values and parent IDs, subscribing, cancelling/confirming unsubscribe, local
+  refresh, server errors and a window closed during a pending request.
+- Transport tests verify literal argv and JSON stdin, names containing shell
+  syntax, explicit account requirements, cancellation, and rejection of
+  mismatched accounts/roots, unsupported response versions and duplicate IDs.
+- The folder-manager and new-folder dialog screenshots were visually inspected.
+  No live server folder was changed; native KDE pointer interaction was not
+  available in the headless environment.
+- Companion MailSalonSync 0.7.0 tests cover protocol requests, durable TOML
+  mappings, retained cached mail, collision/path guards, partial failure recovery,
+  and automatic lock release after a helper process is killed. Its Linux build
+  and Windows cross-build passed. A disposable IMAP server verifies newly saved
+  mappings are used by normal sync and disabled mappings are skipped.
+
 ## MailSalonGUI 0.3.1
 
 - The full software-driver test suite and vet passed for both interfaces and

@@ -2,6 +2,11 @@
 
 ## Mail
 
+Use **+** beside Folders to create a server folder, or **Manage folders…** to
+subscribe to remote folders and control local syncing. These actions require
+MailSalonSync 0.7.0+ and `sync_account` in the account's TOML settings. See
+[Folders and subscriptions](folders.md) for setup and the full workflow.
+
 Select an account and folder. Messages appear newest first. Unread messages
 have a dot and bold subject. Selecting one message marks it read after successful
 parsing. A group selection does not mark all its messages read just by selecting

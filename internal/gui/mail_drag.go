@@ -28,7 +28,7 @@ type mailDrag struct {
 }
 
 func (a *App) startMailDrag(id int) bool {
-	if id < 0 || id >= len(a.messages) || a.tabs.SelectedIndex() != 0 || a.Window.Canvas().Overlays().Top() != nil || (a.changing && !a.changingRead) || a.syncing {
+	if id < 0 || id >= len(a.messages) || a.tabs.SelectedIndex() != 0 || a.Window.Canvas().Overlays().Top() != nil || (a.changing && !a.changingRead) || a.syncing || a.folderBusy {
 		return false
 	}
 	a.cancelMailDrag()
@@ -42,7 +42,7 @@ func (a *App) startMailDrag(id int) bool {
 }
 
 func (a *App) validMailDrag(d *mailDrag) bool {
-	return d != nil && a.ctx.Err() == nil && a.account == d.account && a.generation == d.generation && a.messageList.revision == d.revision && a.folderPath == d.source && a.tabs.SelectedIndex() == 0 && a.Window.Canvas().Overlays().Top() == nil && !a.syncing && (!a.changing || a.changingRead)
+	return d != nil && a.ctx.Err() == nil && a.account == d.account && a.generation == d.generation && a.messageList.revision == d.revision && a.folderPath == d.source && a.tabs.SelectedIndex() == 0 && a.Window.Canvas().Overlays().Top() == nil && !a.syncing && !a.folderBusy && (!a.changing || a.changingRead)
 }
 func insideObject(a *App, object fyne.CanvasObject, point fyne.Position) bool {
 	if !object.Visible() {
@@ -169,4 +169,9 @@ func (r *folderRow) MouseOut() {
 	if r.app.folderHover == r {
 		r.app.hoverFolder(nil)
 	}
+}
+
+func (r *folderRow) TappedSecondary(event *fyne.PointEvent) {
+	menu := fyne.NewMenu("Folders", fyne.NewMenuItem("New folder…", func() { r.app.showFolderManager(true) }), fyne.NewMenuItem("Manage subscriptions…", func() { r.app.showFolderManager(false) }))
+	widget.ShowPopUpMenuAtPosition(menu, r.app.Window.Canvas(), event.AbsolutePosition)
 }
