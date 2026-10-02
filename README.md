@@ -1,7 +1,7 @@
 # MailSalon and MailSalonGUI
 
 One Go codebase with two interfaces: **MailSalon**, the gotui terminal client
-(version **0.9.0**), and **MailSalonGUI**, the Fyne desktop client (version **0.3.1**).
+(version **0.9.0**), and **MailSalonGUI**, the Fyne desktop client (version **0.4.0**).
 Both use the same Maildir, MIME, TOML, transport, OpenPGP and contacts/calendar
 packages. Each retains its own executable, configuration path and interface.
 
@@ -136,6 +136,7 @@ and [Usage](docs/usage.md) for everyday workflows.
 - Sender/subject search, read/unread state, archive and two-stage Trash deletion.
 - Multiple message selection with Ctrl-click, Shift-click and Ctrl+A.
 - Drag a message or selected group onto an existing folder to move it.
+- Create remote folders and manage subscriptions through MailSalonSync 0.7.0+, retaining cached mail on unsubscribe.
 - Bulk read/unread, archive and confirmed deletion from the toolbar, keyboard and context menu.
 - Message-list letter shortcuts: `r` reply, `Shift+r` reply all, `e` archive,
   `f` forward and more; `?` or Help → Keyboard shortcuts shows the keys.

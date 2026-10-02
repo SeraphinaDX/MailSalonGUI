@@ -133,7 +133,7 @@ func (a *App) confirmDeleteMessages(entries []maildir.Entry) {
 // One worker owns an immutable snapshot. Successful operations stay committed
 // if another message fails; report all failures and refresh the actual Maildir.
 func (a *App) mutateMessages(entries []maildir.Entry, label string, moved bool, fn func(*maildir.Entry) error) {
-	if a.changing {
+	if a.changing || a.folderBusy {
 		return
 	}
 	a.cancelMailDrag()

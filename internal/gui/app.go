@@ -43,6 +43,9 @@ type App struct {
 	mailDrag                           *mailDrag
 	folderHover                        *folderRow
 	folderHoverPath                    string
+	folderManager                      *folderManager
+	folderBusy                         bool
+	folderCommand                      func(context.Context, config.Account, transport.FolderRequest) (transport.FolderResponse, error)
 	messageList                        *messageList
 	messageMenu                        *widget.PopUpMenu
 	messageMenuItems                   map[string]*fyne.MenuItem
@@ -167,7 +170,8 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 	preview := container.NewBorder(container.NewVBox(readActions, manageActions, widget.NewSeparator(), a.headers, a.security), nil, nil, nil, container.NewVScroll(container.NewVBox(a.body, a.attachments)))
 	reader := container.NewHSplit(container.NewBorder(a.search, a.summary, nil, nil, a.messageList), preview)
 	reader.Offset = 0.40
-	mailPane := container.NewHSplit(container.NewBorder(widget.NewLabelWithStyle("Folders", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), nil, nil, nil, a.folderList), reader)
+	folderHeader := container.NewBorder(nil, nil, widget.NewLabelWithStyle("Folders", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() { a.showFolderManager(true) }))
+	mailPane := container.NewHSplit(container.NewBorder(folderHeader, widget.NewButton("Manage folders…", func() { a.showFolderManager(false) }), nil, nil, a.folderList), reader)
 	mailPane.Offset = 0.17
 	a.contacts = a.newCollectionView(true)
 	a.calendar = a.newCollectionView(false)
@@ -498,7 +502,7 @@ func (a *App) reply(forward, all bool) {
 	}
 }
 func (a *App) sync() {
-	if a.syncing {
+	if a.syncing || a.folderBusy {
 		return
 	}
 	commands := []string{}

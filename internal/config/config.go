@@ -36,6 +36,9 @@ type Account struct {
 	DownloadDir    string
 	TrashFolder    string
 	ArchiveFolder  string
+	SyncAccount    string
+	SyncConfig     string
+	SyncExecutable string
 	GPG            GPG
 }
 
@@ -132,16 +135,19 @@ type fileGPG struct {
 }
 
 type fileAccount struct {
-	Name          string  `toml:"name"`
-	Maildir       string  `toml:"maildir"`
-	From          string  `toml:"from"`
-	SignatureFile string  `toml:"signature_file"`
-	TrashFolder   string  `toml:"trash_folder"`
-	ArchiveFolder string  `toml:"archive_folder"`
-	DownloadDir   string  `toml:"download_dir"`
-	Receive       string  `toml:"receive"`
-	Send          string  `toml:"send"`
-	GPG           fileGPG `toml:"gpg"`
+	Name           string  `toml:"name"`
+	Maildir        string  `toml:"maildir"`
+	From           string  `toml:"from"`
+	SignatureFile  string  `toml:"signature_file"`
+	TrashFolder    string  `toml:"trash_folder"`
+	ArchiveFolder  string  `toml:"archive_folder"`
+	DownloadDir    string  `toml:"download_dir"`
+	Receive        string  `toml:"receive"`
+	Send           string  `toml:"send"`
+	SyncAccount    string  `toml:"sync_account"`
+	SyncConfig     string  `toml:"sync_config"`
+	SyncExecutable string  `toml:"sync_executable"`
+	GPG            fileGPG `toml:"gpg"`
 }
 
 type fileKeybindings struct {
@@ -547,6 +553,9 @@ func normalizeAccount(a fileAccount, index int) Account {
 		DownloadDir:    expandPath(downloadDir),
 		ReceiveCommand: strings.TrimSpace(a.Receive),
 		SendCommand:    strings.TrimSpace(a.Send),
+		SyncAccount:    strings.TrimSpace(a.SyncAccount),
+		SyncConfig:     expandPath(strings.TrimSpace(a.SyncConfig)),
+		SyncExecutable: expandPath(strings.TrimSpace(a.SyncExecutable)),
 		GPG:            normalizeGPG(a.GPG),
 	}
 }

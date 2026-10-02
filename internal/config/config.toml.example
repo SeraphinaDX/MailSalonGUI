@@ -13,6 +13,12 @@ download_dir = "~/Downloads"
 receive = "MailSalonSync -plain sync"
 send = "MailSalonSync -plain jmap-send -account personal-jmap"
 
+# Optional remote folder creation/subscriptions (MailSalonSync >= 0.7.0).
+# Must match an account in MailSalonSync; its local_root must equal maildir above.
+# sync_account = "personal-jmap"
+# sync_config = "~/.config/MailSalonSync/config.toml"  # omit for the default
+# sync_executable = "MailSalonSync"                  # binary path, not a shell command
+
 # Optional GnuPG support (configure your keyring first).
 # [accounts.gpg]
 # enabled = true

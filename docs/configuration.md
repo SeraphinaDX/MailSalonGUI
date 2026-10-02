@@ -14,6 +14,12 @@ the terminal interface.
 
 ## One account
 
+Optional remote folder management uses `sync_account` (the MailSalonSync account
+name), `sync_config` (a custom sync config path), and `sync_executable` (a binary
+name/path). It requires MailSalonSync 0.7.0+ and matching Maildir roots. See
+[Folders and subscriptions](folders.md) for setup. Receive/send commands continue
+to work independently of these settings.
+
 ```toml
 [[accounts]]
 name = "personal"
