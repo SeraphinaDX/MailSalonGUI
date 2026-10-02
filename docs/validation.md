@@ -1,5 +1,27 @@
 # Validation
 
+## MailSalonGUI 0.3.1
+
+- The full software-driver test suite and vet passed for both interfaces and
+  shared packages. GUI and Maildir race tests passed; terminal/core tests also
+  passed with `CGO_ENABLED=0`.
+- Both native Linux executables built successfully and report MailSalonGUI
+  0.3.1 and MailSalon 0.9.0.
+- Canvas drag tests moved one message to Sent and verified ordinary folder
+  clicks still open folders. Local Maildir tests moved selected groups and an
+  unselected message, including a discovered Maildir++ nested folder.
+- A drop during automatic mark-read waited for the rename and used the current
+  path. Cancelled, outside, same-folder and stale view/selection/account drops
+  left messages in place. Tests reject recycled targets, sync/modal drops and
+  gestures begun while busy, allowing a new gesture after release.
+- Maildir tests verify message bytes, new/cur location, flags, collision-safe
+  filenames, same-folder no-ops and invalid destinations. A GUI failure test
+  verifies the error dialog and retained source when a destination disappears.
+- The software-rendered bulk-drag screenshot was visually inspected for the
+  destination highlight, selected rows and message-count status.
+- No remote synchronization or native desktop pointer interaction was exercised
+  in the headless environment.
+
 ## MailSalonGUI 0.3.0 / MailSalon 0.9.0 consolidation
 
 - The full software-driver suite and vet passed for both commands, both

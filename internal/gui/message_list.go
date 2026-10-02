@@ -27,6 +27,7 @@ type messageList struct {
 	modifiers          func() fyne.KeyModifier
 	onShortcut         func(fyne.Shortcut)
 	onRune             func(rune)
+	onCancelDrag       func()
 	onDelete           func()
 	onSelected         func(int)
 	// Resolve lazily: GLFW is initialized only after a desktop window opens.
@@ -207,6 +208,9 @@ func (l *messageList) TypedKey(event *fyne.KeyEvent) {
 	}
 	switch event.Name {
 	case fyne.KeyEscape:
+		if l.onCancelDrag != nil {
+			l.onCancelDrag()
+		}
 		l.UnselectAll()
 		return
 	case fyne.KeyDown:
@@ -260,6 +264,39 @@ type messageRow struct {
 	onContext     func(int, fyne.Position)
 	background    *canvas.Rectangle
 	selected      bool
+	dragging      bool
+	dragAttempted bool
+	onDragStart   func(int) bool
+	onDragMove    func(fyne.Position)
+	onDragEnd     func()
+}
+
+func (r *messageRow) Dragged(event *fyne.DragEvent) {
+	if !r.dragAttempted {
+		r.dragAttempted = true
+		if r.onDragStart == nil || !r.onDragStart(r.id) {
+			return
+		}
+		r.dragging = true
+	}
+	if !r.dragging {
+		return
+	}
+	if r.onDragMove != nil {
+		position := event.AbsolutePosition
+		// Fyne's software Drag helper supplies a relative start plus delta.
+		if position == (fyne.Position{}) {
+			position = fyne.CurrentApp().Driver().AbsolutePositionForObject(r).Add(event.Position).Add(fyne.NewPos(event.Dragged.DX, event.Dragged.DY))
+		}
+		r.onDragMove(position)
+	}
+}
+func (r *messageRow) DragEnd() {
+	if r.dragging && r.onDragEnd != nil {
+		r.onDragEnd()
+	}
+	r.dragging = false
+	r.dragAttempted = false
 }
 
 func newMessageRow(onSelect func(int), onContext func(int, fyne.Position)) *messageRow {

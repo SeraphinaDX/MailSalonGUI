@@ -37,6 +37,14 @@ set. Selection changes increment a revision so an open confirmation or queued
 action cannot follow a different selection. Filtering remaps selected paths
 onto visible rows, and folder/account reloads clear selection.
 
+`mail_drag.go` captures account, view generation and selection revision for a
+message-row drag. Folder rows expose hover targets without selecting a folder;
+the drop requires the pointer inside both the row and the list viewport and
+checks the row's path against its current folder ID to reject recycled targets.
+Drops use the existing bulk worker and wait for automatic mark-read renames
+before resolving selected paths. Escape, selection and view changes cancel
+active drags. A rejected gesture cannot restart until the pointer is released.
+
 Message-list letters use `TypedRune`, while navigation/Delete use `TypedKey`.
 Desktop drivers deliver both events for printable keys; handling letters once
 avoids duplicate actions. `mail_shortcuts.go` checks list focus, the active Mail
