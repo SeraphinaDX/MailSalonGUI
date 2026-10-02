@@ -1,5 +1,13 @@
 # Changelog
 
+## MailSalonGUI 0.4.1
+
+- Restore left-click folder switching in the sidebar after adding its context
+  menu. Forward row clicks through list selection, preserving its highlight,
+  right-click actions and drag-and-drop behavior.
+- Add row-level click regression tests for returning to Inbox and stale rows;
+  canvas-only tap tests do not reproduce native desktop hit testing.
+
 ## MailSalonGUI 0.4.0
 
 - Create remote folders and subscribe/unsubscribe through MailSalonSync 0.7.0+

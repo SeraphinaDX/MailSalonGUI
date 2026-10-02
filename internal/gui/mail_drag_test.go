@@ -67,6 +67,44 @@ func beginDrag(t *testing.T, a *App, id int, target string) (*messageRow, *folde
 	return r, f
 }
 
+func TestFolderRowPrimaryClickAfterContextMenu(t *testing.T) {
+	a, q := demoApp(t)
+	sent := visibleFolderRow(t, a, "Sent")
+	// Desktop Fyne hit testing picks the row because it handles secondary
+	// clicks. TapCanvas only searches primary handlers and can incorrectly
+	// fall through to the enclosing list item, hiding this regression.
+	tappable, ok := any(sent).(fyne.Tappable)
+	if !ok {
+		t.Fatal("folder context-menu row must also handle primary clicks")
+	}
+	test.TapSecondary(sent)
+	if filepath.Base(a.folderPath) != "INBOX" {
+		t.Fatal("context menu changed the current folder")
+	}
+	a.Window.Canvas().Overlays().Top().Hide()
+	test.Tap(tappable)
+	pump(t, q, func() bool { return filepath.Base(a.folderPath) == "Sent" && a.status.Text == "Ready — Sent" })
+	inbox := visibleFolderRow(t, a, "INBOX")
+	test.Tap(any(inbox).(fyne.Tappable))
+	pump(t, q, func() bool { return filepath.Base(a.folderPath) == "INBOX" && len(a.messages) == 5 })
+}
+
+func TestFolderRowClickRejectsStaleRow(t *testing.T) {
+	a, _ := demoApp(t)
+	row := visibleFolderRow(t, a, "Sent")
+	tappable, ok := any(row).(fyne.Tappable)
+	if !ok {
+		t.Fatal("folder row must handle primary clicks")
+	}
+	row.path = "stale path"
+	test.Tap(tappable)
+	row.id = -1
+	test.Tap(tappable)
+	if filepath.Base(a.folderPath) != "INBOX" {
+		t.Fatal("stale row changed folder")
+	}
+}
+
 func TestDragCanvasMovesMailToFolder(t *testing.T) {
 	a, q := demoApp(t)
 	a.selectMessage(0)
