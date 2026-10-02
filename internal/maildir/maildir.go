@@ -294,18 +294,49 @@ func Delete(e Entry, trash Folder) error {
 // their Maildir flags. MailSalon deliberately does not create the Archive
 // folder automatically—the caller must discover and select an existing one.
 func Archive(e Entry, archive Folder) error {
-	if samePath(filepath.Dir(filepath.Dir(e.Path)), archive.Path) {
+	return Move(e, archive)
+}
+
+// Move relocates mail to an existing Maildir, retaining new/cur and flags.
+// The destination comes from discovery; this operation never creates folders.
+func Move(e Entry, destination Folder) error {
+	if samePath(filepath.Dir(filepath.Dir(e.Path)), destination.Path) {
 		return nil
 	}
-	if !isMaildir(archive.Path) {
-		return fmt.Errorf("archive folder %s is not a Maildir", archive.Path)
+	if !isMaildir(destination.Path) {
+		return fmt.Errorf("destination folder %s is not a Maildir", destination.Path)
 	}
 	subdir := filepath.Base(filepath.Dir(e.Path))
 	if subdir != "new" && subdir != "cur" {
 		subdir = "cur"
 	}
-	dst := uniquePath(filepath.Join(archive.Path, subdir, filepath.Base(e.Path)))
+	dst, err := uniqueMessagePath(filepath.Join(destination.Path, subdir, filepath.Base(e.Path)))
+	if err != nil {
+		return err
+	}
 	return moveFile(e.Path, dst)
+}
+
+// Insert a collision suffix before Maildir's info separator, keeping flags intact.
+func uniqueMessagePath(path string) (string, error) {
+	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+		return path, nil
+	} else if err != nil {
+		return "", err
+	}
+	base, info := path, ""
+	if index := strings.LastIndex(filepath.Base(path), ":2,"); index >= 0 {
+		index += len(path) - len(filepath.Base(path))
+		base, info = path[:index], path[index:]
+	}
+	for i := 1; ; i++ {
+		candidate := fmt.Sprintf("%s.%d%s", base, i, info)
+		if _, err := os.Lstat(candidate); errors.Is(err, os.ErrNotExist) {
+			return candidate, nil
+		} else if err != nil {
+			return "", err
+		}
+	}
 }
 
 // readSummary parses only the headers required by the message list. If Date is

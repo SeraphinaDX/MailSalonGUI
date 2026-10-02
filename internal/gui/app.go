@@ -40,6 +40,9 @@ type App struct {
 	account                            int
 	folders                            []maildir.Folder
 	folderList                         *widget.List
+	mailDrag                           *mailDrag
+	folderHover                        *folderRow
+	folderHoverPath                    string
 	messageList                        *messageList
 	messageMenu                        *widget.PopUpMenu
 	messageMenuItems                   map[string]*fyne.MenuItem
@@ -90,9 +93,16 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 	a.search = widget.NewEntry()
 	a.search.SetPlaceHolder("Search this folder — sender or subject")
 	a.search.OnChanged = func(string) { a.filterMessages() }
-	a.folderList = widget.NewList(func() int { return len(a.folders) }, func() fyne.CanvasObject { l := widget.NewLabel(""); l.Truncation = fyne.TextTruncateEllipsis; return l }, func(id widget.ListItemID, o fyne.CanvasObject) {
+	a.folderList = widget.NewList(func() int { return len(a.folders) }, func() fyne.CanvasObject { return newFolderRow(a) }, func(id widget.ListItemID, o fyne.CanvasObject) {
+		row := o.(*folderRow)
+		row.id = -1
 		if id >= 0 && id < len(a.folders) {
-			o.(*widget.Label).SetText(a.folders[id].Name)
+			row.id = id
+			row.label.SetText(a.folders[id].Name)
+			row.path = a.folders[id].Path
+		}
+		if a.folderHover == row && row.path != a.folderHoverPath {
+			a.hoverFolder(nil)
 		}
 	})
 	a.folderList.OnSelected = func(id widget.ListItemID) {
@@ -101,7 +111,9 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 		}
 	}
 	a.messageList = newMessageList(func() int { return len(a.messages) }, func() fyne.CanvasObject {
-		return newMessageRow(a.selectMessage, a.showMessageMenu)
+		row := newMessageRow(a.selectMessage, a.showMessageMenu)
+		row.onDragStart, row.onDragMove, row.onDragEnd = a.startMailDrag, a.updateMailDrag, a.finishMailDrag
+		return row
 	}, func(id int, o fyne.CanvasObject) {
 		row := o.(*messageRow)
 		row.id = -1
@@ -127,12 +139,14 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 	}, a.deleteMessage)
 	a.messageList.onSelected = a.openMessage
 	a.messageList.onRune = a.handleMessageRune
+	a.messageList.onCancelDrag = a.cancelMailDrag
 	a.messageList.onShortcut = func(shortcut fyne.Shortcut) {
 		if canvas, ok := a.Window.Canvas().(fyne.Shortcutable); ok {
 			canvas.TypedShortcut(shortcut)
 		}
 	}
 	a.messageList.onSelectionChanged = func() {
+		a.cancelMailDrag()
 		a.hideMessageMenu()
 		a.updateSummary()
 		if len(a.messageList.selection) == 0 {
@@ -159,6 +173,7 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 	a.calendar = a.newCollectionView(false)
 	a.tabs = container.NewAppTabs(container.NewTabItemWithIcon("Mail", theme.MailComposeIcon(), mailPane), container.NewTabItemWithIcon("Contacts", theme.AccountIcon(), a.contacts.content), container.NewTabItemWithIcon("Calendar", theme.CalendarIcon(), a.calendar.content))
 	a.tabs.OnSelected = func(item *container.TabItem) {
+		a.cancelMailDrag()
 		switch item.Text {
 		case "Contacts":
 			a.contacts.reloadCollections()
@@ -252,6 +267,8 @@ func (a *App) clearPreview() {
 	a.attachments.Refresh()
 }
 func (a *App) reload() {
+	a.cancelMailDrag()
+	a.hoverFolder(nil)
 	a.generation++
 	gen := a.generation
 	acc := a.cfg.Accounts[a.account]
@@ -293,6 +310,7 @@ func (a *App) reload() {
 	}()
 }
 func (a *App) loadFolder(folder maildir.Folder) {
+	a.cancelMailDrag()
 	a.generation++
 	gen := a.generation
 	a.folderPath = folder.Path

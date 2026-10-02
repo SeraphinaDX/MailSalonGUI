@@ -1,5 +1,16 @@
 # Changelog
 
+## MailSalonGUI 0.3.1
+
+- Drag messages from the email list onto existing folders in the current account.
+  Dragging a selected message moves the whole selection; dragging an unselected
+  message selects and moves only that message. Highlight the destination and
+  show the message count while dragging; Escape cancels.
+- Guard drops against changed views, selections, recycled rows, synchronization
+  and dialogs. Wait for automatic mark-read renames before resolving file paths.
+- Preserve Maildir flags and message contents when moving, including filename
+  collisions, and report failures through the existing bulk-operation workflow.
+
 ## MailSalonGUI 0.3.0 / MailSalon 0.9.0
 
 - Consolidate the latest terminal client and desktop client in this repository,

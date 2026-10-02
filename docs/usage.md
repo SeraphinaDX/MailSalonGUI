@@ -31,6 +31,18 @@ and the list shows the selection count. Search keeps selected messages that
 remain visible and drops hidden messages; changing folders/accounts or reloading
 clears selection.
 
+Drag an email onto a folder in the left pane to **move** it. Dragging any selected
+email moves the entire selection; dragging an unselected email selects and moves
+only that email. The destination highlights and the status bar shows the count
+before release. You can use any existing folder in the current account, including
+nested folders, Sent, Archive and Trash. Dropping onto the current folder or
+outside a folder leaves the mail in place; **Escape** cancels the drag.
+Folders stay closed during the drop and the source list refreshes after the move.
+Moves preserve message contents and Maildir flags. A failed move is reported and
+its source is retained; successful moves in the same group remain committed.
+Dragging is unavailable during synchronization or another bulk operation.
+Sync with your configured tool to propagate these local moves to the server.
+
 **Archive** moves all selected messages into the existing configured archive folder.
 **Read / unread** marks the whole selection read if any selected message is
 unread; otherwise it marks the selection unread. The context menu also offers

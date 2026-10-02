@@ -136,6 +136,7 @@ func (a *App) mutateMessages(entries []maildir.Entry, label string, moved bool, 
 	if a.changing {
 		return
 	}
+	a.cancelMailDrag()
 	a.changing = true
 	a.reading++ // Pending parses must not undo an explicit mark-unread operation.
 	a.updateMessageMenu()
