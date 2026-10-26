@@ -460,16 +460,16 @@ func (a *App) loadMessage(id int, autoRead bool) {
 			a.body.Segments = messageBodySegments(p)
 			a.body.Refresh()
 			a.bodyText.SetText(p.DisplayText())
-			a.Window.Content().Refresh()
-			if restoreOffset != nil && a.previewScroll != nil {
-				a.previewScroll.ScrollToOffset(*restoreOffset)
-			}
 			for _, attachment := range p.Attachments {
 				att := attachment
 				if card := a.calendarAttachment(att, p, account); card != nil {
 					a.attachments.Add(card)
 				}
 				a.attachments.Add(widget.NewButtonWithIcon(fmt.Sprintf("Save %s (%d bytes)", att.Filename, len(att.Data)), theme.DownloadIcon(), func() { a.saveAttachment(att, acc.DownloadDir) }))
+			}
+			a.Window.Content().Refresh()
+			if restoreOffset != nil && a.previewScroll != nil {
+				a.previewScroll.ScrollToOffset(*restoreOffset)
 			}
 			if autoRead && e.Unread && len(a.messageList.selection) == 1 && a.messageList.selection[id] {
 				a.changeRead(e, true)
