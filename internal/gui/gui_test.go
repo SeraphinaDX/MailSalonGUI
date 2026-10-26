@@ -285,3 +285,14 @@ func TestSyncDeduplicatesCommandsAndSkipsOverlappingRuns(t *testing.T) {
 		t.Fatalf("duplicated sync: %q %v", data, err)
 	}
 }
+
+func TestReplyDraftDateUsesReaderTimezone(t *testing.T) {
+	loc := time.FixedZone("EDT", -4*3600)
+	p := &mimeutil.ParsedMessage{From: "Sender <sender@example.com>", Subject: "test", Date: "Mon, 26 Oct 2026 15:30:00 +0000", Body: "hello"}
+	for _, forward := range []bool{false, true} {
+		d := replyDraftInLocation(p, forward, false, nil, loc)
+		if !strings.Contains(d.Body, "Mon, 26 Oct 2026 11:30:00 -0400") {
+			t.Fatalf("forward=%v: wrong quoted time: %q", forward, d.Body)
+		}
+	}
+}
