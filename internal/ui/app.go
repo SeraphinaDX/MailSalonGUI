@@ -19,6 +19,7 @@ import (
 
 	"github.com/SeraphinaDX/MailSalonGUI/internal/config"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/maildir"
+	"github.com/SeraphinaDX/MailSalonGUI/internal/mailtime"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/mimeutil"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/pgp"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/pim"
@@ -1119,14 +1120,14 @@ func (a *App) startCompose(source *mimeutil.ParsedMessage, forward bool) {
 
 	if source != nil && forward {
 		c.subject.Text = addSubjectPrefix(source.Subject, "Fwd:")
-		c.body.Text = forwardBody(source)
+		c.body.Text = forwardBodyInLocation(source, a.cfg.MailLocation())
 		c.forwardAttachments = append([]mimeutil.Attachment(nil), source.Attachments...)
 	} else if source != nil {
 		c.to.Text = replyAddress(source.From)
 		c.subject.Text = addSubjectPrefix(source.Subject, "Re:")
 		c.inReplyTo = source.MessageID
 		c.references = strings.TrimSpace(strings.TrimSpace(source.References) + " " + strings.TrimSpace(source.MessageID))
-		c.body.Text = quoteBody(source)
+		c.body.Text = quoteBodyInLocation(source, a.cfg.MailLocation())
 	}
 	if c.isReply {
 		c.field = composeBody
@@ -1562,7 +1563,7 @@ func (a *App) populateMessageTable() {
 			mark,
 			safeUI(m.From),
 			safeUI(emptySubject(m.Subject)),
-			formatDate(m.Date),
+			formatDateInLocation(m.Date, a.cfg.MailLocation()),
 		})
 	}
 	a.messageTbl.Rows = rows
@@ -1592,7 +1593,7 @@ func (a *App) populatePreview() {
 	if strings.TrimSpace(a.parsed.Cc) != "" {
 		fmt.Fprintf(&b, "Cc: %s\n", a.parsed.Cc)
 	}
-	fmt.Fprintf(&b, "Date: %s\n", a.parsed.Date)
+	fmt.Fprintf(&b, "Date: %s\n", mailtime.DisplayHeaderDate(a.parsed.Date, a.cfg.MailLocation()))
 	fmt.Fprintf(&b, "Subject: %s\n", emptySubject(a.parsed.Subject))
 	if security := strings.TrimSpace(a.security.Summary()); security != "" {
 		fmt.Fprintf(&b, "%s\n", security)
@@ -2246,9 +2247,13 @@ func addSubjectPrefix(subject, prefix string) string {
 }
 
 func quoteBody(p *mimeutil.ParsedMessage) string {
+	return quoteBodyInLocation(p, time.Local)
+}
+
+func quoteBodyInLocation(p *mimeutil.ParsedMessage, location *time.Location) string {
 	var b strings.Builder
 	b.WriteString("\n\nOn ")
-	b.WriteString(p.Date)
+	b.WriteString(mailtime.DisplayHeaderDate(p.Date, location))
 	b.WriteString(", ")
 	b.WriteString(p.From)
 	b.WriteString(" wrote:\n")
@@ -2261,8 +2266,12 @@ func quoteBody(p *mimeutil.ParsedMessage) string {
 }
 
 func forwardBody(p *mimeutil.ParsedMessage) string {
+	return forwardBodyInLocation(p, time.Local)
+}
+
+func forwardBodyInLocation(p *mimeutil.ParsedMessage, location *time.Location) string {
 	return fmt.Sprintf("\n\n---------- Forwarded message ----------\nFrom: %s\nDate: %s\nSubject: %s\nTo: %s\n\n%s\n",
-		p.From, p.Date, p.Subject, p.To, p.Body)
+		p.From, mailtime.DisplayHeaderDate(p.Date, location), p.Subject, p.To, p.Body)
 }
 
 func commandError(prefix, output string, err error) string {
@@ -2293,10 +2302,15 @@ func emptySubject(s string) string {
 }
 
 func formatDate(t time.Time) string {
+	return formatDateInLocation(t, time.Local)
+}
+
+func formatDateInLocation(t time.Time, location *time.Location) string {
 	if t.IsZero() {
 		return ""
 	}
-	now := time.Now()
+	t = mailtime.InLocation(t, location)
+	now := time.Now().In(mailtime.InLocation(t, location).Location())
 	if now.Year() == t.Year() && now.YearDay() == t.YearDay() {
 		return t.Format("15:04")
 	}
