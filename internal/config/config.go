@@ -108,6 +108,7 @@ type Config struct {
 	DefaultAccount       string
 	StartupSync          bool
 	SyncInterval         time.Duration
+	Timezone             string
 	AutoAddReplyContacts bool
 	CalendarDefaultView  string
 	CalendarWeekStart    string
@@ -235,6 +236,7 @@ type fileConfig struct {
 	Options struct {
 		StartupSync          bool   `toml:"startup_sync"`
 		SyncInterval         string `toml:"sync_interval"`
+		Timezone             string `toml:"timezone"`
 		DefaultAccount       string `toml:"default_account"`
 		AutoAddReplyContacts *bool  `toml:"auto_add_reply_contacts"`
 		CalendarDefaultView  string `toml:"calendar_default_view"`
@@ -373,12 +375,26 @@ func Default() Config {
 		}},
 		DefaultAccount:       "default",
 		SyncInterval:         5 * time.Minute,
+		Timezone:             "local",
 		AutoAddReplyContacts: true,
 		CalendarDefaultView:  "month",
 		CalendarWeekStart:    "monday",
 		Theme:                DefaultTheme(),
 		Keybindings:          DefaultKeybindings(),
 	}
+}
+
+// MailLocation resolves the timezone selected for displaying incoming mail.
+// An empty or "local" value uses the computer's current timezone.
+func (cfg Config) MailLocation() *time.Location {
+	if cfg.Timezone == "" || strings.EqualFold(cfg.Timezone, "local") {
+		return time.Local
+	}
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		return time.Local
+	}
+	return loc
 }
 
 // DefaultPath retains the desktop default for existing GUI callers.
@@ -418,6 +434,14 @@ func Load(path string) (Config, error) {
 	}
 
 	cfg.StartupSync = raw.Options.StartupSync
+	if zone := strings.TrimSpace(raw.Options.Timezone); zone != "" {
+		if !strings.EqualFold(zone, "local") {
+			if _, err := time.LoadLocation(zone); err != nil {
+				return cfg, fmt.Errorf("options.timezone %q: %w", zone, err)
+			}
+			cfg.Timezone = zone
+		}
+	}
 	if v := strings.ToLower(strings.TrimSpace(raw.Options.CalendarDefaultView)); v != "" {
 		cfg.CalendarDefaultView = v
 	}

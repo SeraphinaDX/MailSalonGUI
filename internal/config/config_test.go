@@ -403,3 +403,40 @@ func TestCalendarImportBinding(t *testing.T) {
 		t.Fatal("calendar binding not applied")
 	}
 }
+
+func TestMailTimezoneOption(t *testing.T) {
+	if got := Default().Timezone; got != "local" {
+		t.Fatalf("default timezone = %q", got)
+	}
+	for _, tc := range []struct {
+		name, option, want string
+		valid bool
+	}{
+		{"default", "", "local", true},
+		{"explicit local", "local", "local", true},
+		{"toronto", "America/Toronto", "America/Toronto", true},
+		{"bad", "Not/A_Real_Zone", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			configText := "[[accounts]]\nname = \"personal\"\n[options]\n"
+			if tc.option != "" {
+				configText += "timezone = \"" + tc.option + "\"\n"
+			}
+			if err := os.WriteFile(path, []byte(configText), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if (err == nil) != tc.valid {
+				t.Fatalf("Load() error = %v, valid = %v", err, tc.valid)
+			}
+			if !tc.valid { return }
+			if cfg.Timezone != tc.want {
+				t.Fatalf("timezone = %q, want %q", cfg.Timezone, tc.want)
+			}
+			if cfg.MailLocation() == nil {
+				t.Fatal("MailLocation returned nil")
+			}
+		})
+	}
+}

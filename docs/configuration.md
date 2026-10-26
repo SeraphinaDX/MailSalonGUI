@@ -36,6 +36,7 @@ send = "MailSalonSync -plain jmap-send -account personal-jmap"
 default_account = "personal"
 startup_sync = false
 sync_interval = "5m"
+timezone = "local" # Or "America/Toronto"
 auto_add_reply_contacts = true
 ```
 
@@ -43,6 +44,8 @@ Remove `signature_file` if you do not have one. Change `personal-jmap` to the
 account name in your MailSalonSync configuration. A signature is read at send
 time and added before quoted text; changing the From account selects that
 account's identity, transport command, signature and PGP settings.
+
+`timezone` controls the display of incoming message dates in both the message list and preview and in reply/forward quotes. The default, `"local"`, uses your computer timezone; an IANA zone such as `"America/Toronto"` overrides it and handles daylight saving time. Original email headers are not rewritten. Invalid timezone names are rejected on startup.
 
 `sync_interval` accepts Go durations such as `30s`, `5m`, or `1h`; use `"0"` to
 disable the timer. Nonzero intervals must be at least one second. Startup sync
