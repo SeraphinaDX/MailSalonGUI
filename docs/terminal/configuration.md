@@ -72,6 +72,7 @@ send = "msmtp -a work -t"
 default_account = "personal"
 startup_sync = false
 sync_interval = "5m"
+timezone = "local"
 auto_add_reply_contacts = true
 ```
 
@@ -120,6 +121,7 @@ calendar_week_start = "monday"
 | --- | --- | --- |
 | `default_account` | First account | Account selected when MailSalon starts |
 | `startup_sync` | `false` | Run the selected account's receive command once at startup |
+| `timezone` | `"local"` | Display incoming message dates in the computer timezone, or specify an IANA zone such as `"America/Toronto"`; sent message headers remain unchanged |
 | `sync_interval` | `"5m"` | Interval between background receive cycles; `"0"` disables them |
 | `auto_add_reply_contacts` | `true` | Save missing senders when opening replies, if a contact collection is configured |
 | `calendar_default_view` | `"month"` | Initial layout: `month`, `week`, `day`, or `agenda` |
