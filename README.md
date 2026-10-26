@@ -131,7 +131,7 @@ and [Usage](docs/usage.md) for everyday workflows.
 
 - Resizable folder, message and preview panes; multiple account selector.
 - Local Maildir and Maildir++ discovery, including container-style INBOX layouts.
-- Plain text and simplified formatted HTML previews, with clickable links and image-button labels.
+- Selectable message headers and body text for mouse selection and clipboard copying, plus a toggle for formatted HTML previews with clickable links and image-button labels.
 - Remote images remain unloaded; scripts and embedded web content are excluded.
 - Sender/subject search, read/unread state, archive and two-stage Trash deletion.
 - Multiple message selection with Ctrl-click, Shift-click and Ctrl+A.
