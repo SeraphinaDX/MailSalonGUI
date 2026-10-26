@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/maildir"
@@ -151,5 +152,37 @@ func TestGUIRefreshMaintainsFolderAndReaderView(t *testing.T) {
 	}
 	if !strings.Contains(a.headers.Text, subject) {
 		t.Fatal("selected message preview was not restored")
+	}
+}
+
+func TestGUIRefreshPreservesMessageWhenNewMailReordersList(t *testing.T) {
+	a, q := demoApp(t)
+	a.messageList.Select(0)
+	waitForMessage(t, a, q)
+	original := a.messages[a.selected]
+	folder := a.folderPath
+
+	// The new mail sorts above the currently selected message, so its old row
+	// number would point to a different email after a scan.
+	raw := "From: Other <other@example.com>\r\n" +
+		"To: Me <me@example.com>\r\n" +
+		"Subject: New after sync\r\n" +
+		"Message-ID: <new-after-sync@example.com>\r\n" +
+		"Date: " + time.Now().Add(24*time.Hour).Format(time.RFC1123Z) + "\r\n" +
+		"\r\nnew message\r\n"
+	path := filepath.Join(folder, "cur", "fresh-new-mail:2,S")
+	if err := os.WriteFile(path, []byte(raw), 0600); err != nil {
+		t.Fatal(err)
+	}
+	a.reload()
+	pump(t, q, func() bool {
+		return len(a.messages) == 6 && a.parsed != nil && a.selected >= 0 &&
+			a.messages[a.selected].MessageID == original.MessageID
+	})
+	if a.selected == 0 {
+		t.Fatal("mail order did not change as expected")
+	}
+	if a.messages[a.selected].Path != original.Path || !a.messageList.selection[a.selected] {
+		t.Fatal("refresh lost the original message after new mail was inserted")
 	}
 }
