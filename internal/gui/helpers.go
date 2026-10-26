@@ -5,10 +5,12 @@ package gui
 import (
 	"fmt"
 	"net/mail"
+	"time"
 	"strings"
 
 	"github.com/SeraphinaDX/MailSalonGUI/internal/config"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/mimeutil"
+	"github.com/SeraphinaDX/MailSalonGUI/internal/mailtime"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/pgp"
 )
 
@@ -39,10 +41,15 @@ func preferredAccount(accounts []config.Account, fallback int, p *mimeutil.Parse
 	return fallback
 }
 func replyDraft(p *mimeutil.ParsedMessage, forward, all bool, accounts []config.Account) mimeutil.Draft {
+	return replyDraftInLocation(p, forward, all, accounts, time.Local)
+}
+
+func replyDraftInLocation(p *mimeutil.ParsedMessage, forward, all bool, accounts []config.Account, location *time.Location) mimeutil.Draft {
 	d := mimeutil.Draft{}
+	date := mailtime.DisplayHeaderDate(p.Date, location)
 	if forward {
 		d.Subject = prefix(p.Subject, "Fwd:")
-		d.Body = fmt.Sprintf("\n\n---------- Forwarded message ----------\nFrom: %s\nDate: %s\nSubject: %s\nTo: %s\n\n%s", p.From, p.Date, p.Subject, p.To, p.Body)
+		d.Body = fmt.Sprintf("\n\n---------- Forwarded message ----------\nFrom: %s\nDate: %s\nSubject: %s\nTo: %s\n\n%s", p.From, date, p.Subject, p.To, p.Body)
 		d.MemoryAttachments = append([]mimeutil.Attachment(nil), p.Attachments...)
 		return d
 	}
@@ -84,7 +91,7 @@ func replyDraft(p *mimeutil.ParsedMessage, forward, all bool, accounts []config.
 	for _, line := range strings.Split(p.Body, "\n") {
 		quoted = append(quoted, "> "+line)
 	}
-	d.Body = fmt.Sprintf("\n\nOn %s, %s wrote:\n%s", p.Date, p.From, strings.Join(quoted, "\n"))
+	d.Body = fmt.Sprintf("\n\nOn %s, %s wrote:\n%s", date, p.From, strings.Join(quoted, "\n"))
 	return d
 }
 func applySignature(body, signature string) string {
