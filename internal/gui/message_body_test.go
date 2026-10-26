@@ -97,3 +97,41 @@ func TestBareTrackingLinkKeepsFullDestinationWithoutOversizedLabel(t *testing.T)
 		t.Fatal("long-link destination was lost or preview label was not shortened")
 	}
 }
+
+func TestPreviewTextIsSelectableWithFormattedViewAvailable(t *testing.T) {
+	a, q := demoApp(t)
+	raw, err := os.ReadFile("../mimeutil/testdata/newsletter.eml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(a.messages[0].Path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	a.selectMessage(0)
+	waitForMessage(t, a, q)
+
+	if !a.headers.Selectable || !a.bodyText.Selectable {
+		t.Fatal("message headers and body must be selectable")
+	}
+	if got, want := a.bodyText.Text, a.parsed.DisplayText(); got != want {
+		t.Fatalf("selectable text is different from the copy-body content:\n got %q\nwant %q", got, want)
+	}
+	if !strings.Contains(a.bodyText.Text, "Reserve your place") {
+		t.Fatal("HTML message alternative was lost in selectable view")
+	}
+	if !a.bodyText.Visible() || a.body.Visible() {
+		t.Fatal("selectable view should be displayed by default")
+	}
+	a.formattedView.SetChecked(true)
+	if a.bodyText.Visible() || !a.body.Visible() {
+		t.Fatal("formatted view should show clickable rich text")
+	}
+	a.formattedView.SetChecked(false)
+	if !a.bodyText.Visible() || a.body.Visible() {
+		t.Fatal("switching back should restore selectable text")
+	}
+	a.clearPreview()
+	if a.bodyText.Text != "" {
+		t.Fatal("selectable content leaked between messages")
+	}
+}

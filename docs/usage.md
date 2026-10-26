@@ -13,9 +13,15 @@ parsing. A group selection does not mark all its messages read just by selecting
 them. Use **Read / unread** to change the selected messages' flags. Drag pane dividers
 for a wider list or preview. Search matches sender and subject in this folder.
 
+The message reader defaults to a selectable text preview. Drag across the body
+or message headers to select words or paragraphs and press **Ctrl+C**, or use
+the selection's context menu to copy. Enable **Formatted view (links)** to
+switch to the styled view with clickable links; switch it off to select text
+again. This preference stays in effect while switching between messages.
+
 HTML mail uses a simplified formatted preview with headings, paragraphs, bold
 and italic text, lists, table rows and clickable links. When a message has both
-HTML and plain alternatives, the preview shows HTML while replies/forwards
+HTML and plain alternatives, the formatted preview shows HTML while replies/forwards
 retain the plain alternative for quoting. Layout follows the content structure;
 complex CSS, columns and browser-specific layouts are not reproduced exactly.
 Remote images are not loaded; image alt text and linked-button labels are kept.

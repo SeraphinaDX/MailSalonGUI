@@ -56,6 +56,8 @@ type App struct {
 	parsed                             *mimeutil.ParsedMessage
 	status, summary, headers, security *widget.Label
 	body                               *widget.RichText
+	bodyText                           *widget.Label
+	formattedView                      *widget.Check
 	attachments                        *fyne.Container
 	search                             *widget.Entry
 	tabs                               *container.AppTabs
@@ -89,10 +91,27 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 	a.summary = widget.NewLabel("Choose a folder")
 	a.headers = widget.NewLabel("Select a message to read it")
 	a.headers.Wrapping = fyne.TextWrapWord
+	a.headers.Selectable = true
 	a.security = widget.NewLabel("")
 	a.security.Wrapping = fyne.TextWrapWord
+	a.security.Selectable = true
 	a.body = widget.NewRichTextWithText("")
 	a.body.Wrapping = fyne.TextWrapWord
+	// RichText supports links and formatting, but not selecting text. Keep a
+	// separate selectable view as the default so copying part of a message works.
+	a.body.Hide()
+	a.bodyText = widget.NewLabel("")
+	a.bodyText.Wrapping = fyne.TextWrapWord
+	a.bodyText.Selectable = true
+	a.formattedView = widget.NewCheck("Formatted view (links)", func(formatted bool) {
+		if formatted {
+			a.bodyText.Hide()
+			a.body.Show()
+		} else {
+			a.body.Hide()
+			a.bodyText.Show()
+		}
+	})
 	a.attachments = container.NewVBox()
 	a.search = widget.NewEntry()
 	a.search.SetPlaceHolder("Search this folder — sender or subject")
@@ -163,12 +182,12 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 		widget.NewButtonWithIcon("Forward", theme.MailForwardIcon(), func() { a.reply(true, false) }),
 		widget.NewButton("Read / unread", a.toggleRead),
 	)
-	manageActions := container.NewHBox(widget.NewButton("Archive", a.archive), widget.NewButtonWithIcon("Delete", theme.DeleteIcon(), a.deleteMessage), widget.NewButton("Copy body", func() {
+	manageActions := container.NewHBox(widget.NewButton("Archive", a.archive), widget.NewButtonWithIcon("Delete", theme.DeleteIcon(), a.deleteMessage), a.formattedView, widget.NewButton("Copy body", func() {
 		if a.parsed != nil {
 			a.Window.Clipboard().SetContent(a.parsed.DisplayText())
 		}
 	}), widget.NewButton("Source", a.showSource))
-	preview := container.NewBorder(container.NewVBox(readActions, manageActions, widget.NewSeparator(), a.headers, a.security), nil, nil, nil, container.NewVScroll(container.NewVBox(a.body, a.attachments)))
+	preview := container.NewBorder(container.NewVBox(readActions, manageActions, widget.NewSeparator(), a.headers, a.security), nil, nil, nil, container.NewVScroll(container.NewVBox(a.bodyText, a.body, a.attachments)))
 	reader := container.NewHSplit(container.NewBorder(a.search, a.summary, nil, nil, a.messageList), preview)
 	reader.Offset = 0.40
 	folderHeader := container.NewBorder(nil, nil, widget.NewLabelWithStyle("Folders", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() { a.showFolderManager(true) }))
@@ -268,6 +287,7 @@ func (a *App) clearPreview() {
 	a.headers.SetText("Select a message to read it")
 	a.security.SetText("")
 	a.body.ParseMarkdown("")
+	a.bodyText.SetText("")
 	a.attachments.Objects = nil
 	a.attachments.Refresh()
 }
@@ -393,6 +413,7 @@ func (a *App) loadMessage(id int, autoRead bool) {
 	a.headers.SetText("Loading message…")
 	a.body.Segments = nil
 	a.body.Refresh()
+	a.bodyText.SetText("")
 	a.attachments.Objects = nil
 	a.attachments.Refresh()
 	// No automatic mutation while parsing: a stale result must not mark a message
@@ -420,6 +441,7 @@ func (a *App) loadMessage(id int, autoRead bool) {
 			a.security.SetText(info.Summary())
 			a.body.Segments = messageBodySegments(p)
 			a.body.Refresh()
+			a.bodyText.SetText(p.DisplayText())
 			a.Window.Content().Refresh()
 			for _, attachment := range p.Attachments {
 				att := attachment
