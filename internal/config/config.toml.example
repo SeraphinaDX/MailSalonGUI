@@ -35,6 +35,7 @@ send = "MailSalonSync -plain jmap-send -account personal-jmap"
 default_account = "personal"
 startup_sync = false
 sync_interval = "5m"  # Go duration; "0" disables the timer.
+# timezone = "America/Toronto"  # Default: "local" (computer timezone).
 auto_add_reply_contacts = true
 calendar_default_view = "month"
 calendar_week_start = "monday"
