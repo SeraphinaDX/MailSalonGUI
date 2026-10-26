@@ -23,6 +23,7 @@ import (
 
 	"github.com/SeraphinaDX/MailSalonGUI/internal/config"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/maildir"
+	"github.com/SeraphinaDX/MailSalonGUI/internal/mailtime"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/mimeutil"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/pgp"
 	"github.com/SeraphinaDX/MailSalonGUI/internal/transport"
@@ -138,7 +139,7 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 			text = "●  " + text
 		}
 		row.subject.SetText(text)
-		row.meta.SetText(e.From + "  ·  " + e.Date.Format("Jan 02 15:04"))
+		row.meta.SetText(e.From + "  ·  " + mailtime.InLocation(e.Date, a.cfg.MailLocation()).Format("Jan 02 15:04"))
 	}, a.deleteMessage)
 	a.messageList.onSelected = a.openMessage
 	a.messageList.onRune = a.handleMessageRune
@@ -415,7 +416,7 @@ func (a *App) loadMessage(id int, autoRead bool) {
 				return
 			}
 			a.parsed = p
-			a.headers.SetText(fmt.Sprintf("%s\nFrom: %s\nTo: %s\nCc: %s\nDate: %s", p.Subject, p.From, p.To, p.Cc, p.Date))
+			a.headers.SetText(fmt.Sprintf("%s\nFrom: %s\nTo: %s\nCc: %s\nDate: %s", p.Subject, p.From, p.To, p.Cc, mailtime.DisplayHeaderDate(p.Date, a.cfg.MailLocation())))
 			a.security.SetText(info.Summary())
 			a.body.Segments = messageBodySegments(p)
 			a.body.Refresh()
@@ -496,7 +497,7 @@ func (a *App) reply(forward, all bool) {
 		idx = preferredAccount(a.cfg.Accounts, idx, a.parsed)
 	}
 	p := a.parsed
-	a.compose(replyDraft(p, forward, all, a.cfg.Accounts), idx, "")
+	a.compose(replyDraftInLocation(p, forward, all, a.cfg.Accounts, a.cfg.MailLocation()), idx, "")
 	if !forward && a.cfg.AutoAddReplyContacts {
 		a.saveReplyContact(p.From, idx)
 	}
