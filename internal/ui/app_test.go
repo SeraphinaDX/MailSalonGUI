@@ -247,3 +247,19 @@ func TestMessageMatchesSearchIncludesBodyAndHeaders(t *testing.T) {
 		t.Fatal("search matched absent text")
 	}
 }
+
+func TestMailDatesInReaderTimezone(t *testing.T) {
+	loc := time.FixedZone("EDT", -4*3600)
+	p := &mimeutil.ParsedMessage{From: "Sender", Subject: "test", Date: "Mon, 26 Oct 2026 15:30:00 +0000", Body: "hello"}
+	when := time.Date(2026, 10, 26, 15, 30, 0, 0, time.UTC)
+	converted := formatDateInLocation(when, loc)
+	if converted != "Oct 26 11:30" && converted != "11:30" {
+		t.Fatalf("message list date = %q", converted)
+	}
+	if !strings.Contains(quoteBodyInLocation(p, loc), "Mon, 26 Oct 2026 11:30:00 -0400") {
+		t.Fatal("reply quote did not localize date")
+	}
+	if !strings.Contains(forwardBodyInLocation(p, loc), "Mon, 26 Oct 2026 11:30:00 -0400") {
+		t.Fatal("forward quote did not localize date")
+	}
+}
