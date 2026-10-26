@@ -10,7 +10,12 @@ MailSalonSync 0.7.0+ and `sync_account` in the account's TOML settings. See
 Select an account and folder. Messages appear newest first. Unread messages
 have a dot and bold subject. Selecting one message marks it read after successful
 parsing. A group selection does not mark all its messages read just by selecting
-them. Use **Read / unread** to change the selected messages' flags. Drag pane dividers
+them. Use **Read / unread** to change the selected messages' flags. Synchronizing
+or reloading keeps the current folder, selected messages and active email open,
+including when the Maildir filename changes with read/unread flags. The reading
+pane also restores its scroll position. If that email was removed from the
+folder, MailSalonGUI clears its preview instead of selecting a different email.
+Drag pane dividers
 for a wider list or preview. Search matches sender and subject in this folder.
 
 The message reader defaults to a selectable text preview. Drag across the body

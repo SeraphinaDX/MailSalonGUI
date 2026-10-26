@@ -48,6 +48,9 @@ type App struct {
 	folderBusy                         bool
 	folderCommand                      func(context.Context, config.Account, transport.FolderRequest) (transport.FolderResponse, error)
 	messageList                        *messageList
+	previewScroll                      *container.Scroll
+	pendingSelectionRestore           *messageSelectionSnapshot
+	pendingPreviewOffset              *fyne.Position
 	messageMenu                        *widget.PopUpMenu
 	messageMenuItems                   map[string]*fyne.MenuItem
 	all, messages                      []maildir.Entry
@@ -187,7 +190,8 @@ func New(f fyne.App, cfg config.Config, path, draftDir string) *App {
 			a.Window.Clipboard().SetContent(a.parsed.DisplayText())
 		}
 	}), widget.NewButton("Source", a.showSource))
-	preview := container.NewBorder(container.NewVBox(readActions, manageActions, widget.NewSeparator(), a.headers, a.security), nil, nil, nil, container.NewVScroll(container.NewVBox(a.bodyText, a.body, a.attachments)))
+	a.previewScroll = container.NewVScroll(container.NewVBox(a.bodyText, a.body, a.attachments))
+	preview := container.NewBorder(container.NewVBox(readActions, manageActions, widget.NewSeparator(), a.headers, a.security), nil, nil, nil, a.previewScroll)
 	reader := container.NewHSplit(container.NewBorder(a.search, a.summary, nil, nil, a.messageList), preview)
 	reader.Offset = 0.40
 	folderHeader := container.NewBorder(nil, nil, widget.NewLabelWithStyle("Folders", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}), widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() { a.showFolderManager(true) }))
@@ -292,6 +296,9 @@ func (a *App) clearPreview() {
 	a.attachments.Refresh()
 }
 func (a *App) reload() {
+	selection := a.snapshotMessageSelection()
+	a.pendingSelectionRestore = nil
+	a.pendingPreviewOffset = nil
 	a.cancelMailDrag()
 	a.hoverFolder(nil)
 	a.generation++
@@ -330,11 +337,19 @@ func (a *App) reload() {
 					index = i
 				}
 			}
+			if previous == folders[index].Path {
+				a.pendingSelectionRestore = selection
+			}
 			a.folderList.Select(index)
 		})
 	}()
 }
 func (a *App) loadFolder(folder maildir.Folder) {
+	selection := a.pendingSelectionRestore
+	a.pendingSelectionRestore = nil
+	if selection != nil && selection.folderPath != folder.Path {
+		selection = nil
+	}
 	a.cancelMailDrag()
 	a.generation++
 	gen := a.generation
@@ -358,6 +373,7 @@ func (a *App) loadFolder(folder maildir.Folder) {
 			}
 			a.all = entries
 			a.filterMessages()
+			a.restoreMessageSelection(selection)
 			a.status.SetText("Ready — " + folder.Name)
 		})
 	}()
@@ -402,6 +418,8 @@ func (a *App) loadMessage(id int, autoRead bool) {
 		return
 	}
 	a.hideMessageMenu()
+	restoreOffset := a.pendingPreviewOffset
+	a.pendingPreviewOffset = nil
 	a.reading++
 	token := a.reading
 	gen := a.generation
@@ -442,13 +460,16 @@ func (a *App) loadMessage(id int, autoRead bool) {
 			a.body.Segments = messageBodySegments(p)
 			a.body.Refresh()
 			a.bodyText.SetText(p.DisplayText())
-			a.Window.Content().Refresh()
 			for _, attachment := range p.Attachments {
 				att := attachment
 				if card := a.calendarAttachment(att, p, account); card != nil {
 					a.attachments.Add(card)
 				}
 				a.attachments.Add(widget.NewButtonWithIcon(fmt.Sprintf("Save %s (%d bytes)", att.Filename, len(att.Data)), theme.DownloadIcon(), func() { a.saveAttachment(att, acc.DownloadDir) }))
+			}
+			a.Window.Content().Refresh()
+			if restoreOffset != nil && a.previewScroll != nil {
+				a.previewScroll.ScrollToOffset(*restoreOffset)
 			}
 			if autoRead && e.Unread && len(a.messageList.selection) == 1 && a.messageList.selection[id] {
 				a.changeRead(e, true)
