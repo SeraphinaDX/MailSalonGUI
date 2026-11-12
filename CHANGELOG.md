@@ -1,5 +1,14 @@
 # Changelog
 
+## MailSalonGUI / MailSalon 0.10.0
+
+- Unify the desktop and terminal clients on one shared version stream.
+- Sync all configured accounts before exiting, deduplicating shared receive
+  commands and waiting for active syncs before a final pass.
+- Keep the GUI open on exit-sync failure so closing can be retried; report
+  terminal exit-sync errors and restore the terminal before exiting.
+- Preserve GUI message selection and reader scroll after synchronization.
+
 ## MailSalonGUI 0.4.1
 
 - Restore left-click folder switching in the sidebar after adding its context

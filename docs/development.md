@@ -9,8 +9,9 @@ build boundaries and migration.
 The shared core must not import Fyne, GLFW, gotui or tcell. Terminal builds and
 tests use `CGO_ENABLED=0`; GUI builds retain their existing zgo/cgo path. `make
 test-tui` checks core/terminal packages without the graphics driver; `make test`
-and `make check` cover both interfaces with the Fyne software driver. Versions
-live in `internal/version`; update GUI packaging metadata with the GUI version.
+and `make check` cover both interfaces with the Fyne software driver. Both
+clients share one version in `internal/version`; update GUI packaging metadata
+to match on release.
 
 Calendar invitation decoding and bounded recurrence projection live in
 `internal/pim`. MIME parsing populates the common decoded invitation model;

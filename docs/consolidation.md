@@ -26,8 +26,9 @@ Use this checkout for future changes to either client after merging the
 consolidation. Existing binaries keep working. The earlier terminal repository
 is left intact; this change does not archive it, change its remote or overwrite
 another checkout. Do not develop independent copies of the core in both repos.
-MailSalon and MailSalonGUI keep separate version streams (0.9.0 and 0.3.0 for
-this consolidation), declared together in `internal/version`.
+MailSalon and MailSalonGUI originally used separate versions (0.9.0 and 0.3.0
+for this consolidation). Starting with 0.10.0, both clients use one shared
+version in `internal/version`.
 
 ## Configuration and local data
 
