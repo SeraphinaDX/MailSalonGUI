@@ -57,6 +57,8 @@ func main() {
 		os.Exit(1)
 	}
 	if err := app.Run(); err != nil {
+		// os.Exit skips the deferred Close, including after an exit-sync failure.
+		ui.Close()
 		fmt.Fprintln(os.Stderr, "MailSalon:", err)
 		os.Exit(1)
 	}

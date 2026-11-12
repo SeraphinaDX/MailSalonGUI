@@ -296,3 +296,34 @@ func TestReplyDraftDateUsesReaderTimezone(t *testing.T) {
 		}
 	}
 }
+
+func TestCloseWaitsForSyncAndRunsFinalPass(t *testing.T) {
+	cfg := config.Default()
+	cfg.Accounts[0].Maildir = t.TempDir()
+	log := filepath.Join(t.TempDir(), "sync.log")
+	cfg.Accounts[0].ReceiveCommand = "printf 'sync\n' >> '" + log + "'"
+	a, q := testApp(t, cfg)
+	a.sync()
+	a.requestClose()
+	a.requestClose()
+	if a.ctx.Err() != nil {
+		t.Fatal("closed before syncing")
+	}
+	pump(t, q, func() bool { return a.ctx.Err() != nil })
+	data, err := os.ReadFile(log)
+	if err != nil || string(data) != "sync\nsync\n" {
+		t.Fatalf("expected active sync then final sync: %q, %v", data, err)
+	}
+}
+
+func TestCloseSyncFailureKeepsWindowOpen(t *testing.T) {
+	cfg := config.Default()
+	cfg.Accounts[0].Maildir = t.TempDir()
+	cfg.Accounts[0].ReceiveCommand = "exit 1"
+	a, q := testApp(t, cfg)
+	a.requestClose()
+	pump(t, q, func() bool { return !a.closing })
+	if a.ctx.Err() != nil {
+		t.Fatal("closed despite exit sync failure")
+	}
+}

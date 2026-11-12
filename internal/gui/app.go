@@ -49,8 +49,8 @@ type App struct {
 	folderCommand                      func(context.Context, config.Account, transport.FolderRequest) (transport.FolderResponse, error)
 	messageList                        *messageList
 	previewScroll                      *container.Scroll
-	pendingSelectionRestore           *messageSelectionSnapshot
-	pendingPreviewOffset              *fyne.Position
+	pendingSelectionRestore            *messageSelectionSnapshot
+	pendingPreviewOffset               *fyne.Position
 	messageMenu                        *widget.PopUpMenu
 	messageMenuItems                   map[string]*fyne.MenuItem
 	all, messages                      []maildir.Entry
@@ -68,6 +68,7 @@ type App struct {
 	syncButton                         *widget.Button
 	progress                           *widget.ProgressBarInfinite
 	syncing, changing                  bool
+	closing                            bool
 	changingRead                       bool
 	pendingDelete                      func()
 	generation, reading                uint64
@@ -546,6 +547,13 @@ func (a *App) reply(forward, all bool) {
 	}
 }
 func (a *App) sync() {
+	if a.closing {
+		return
+	}
+	a.syncThen(nil)
+}
+
+func (a *App) syncThen(after func(bool)) {
 	if a.syncing || a.folderBusy {
 		return
 	}
@@ -561,6 +569,9 @@ func (a *App) sync() {
 	if len(commands) == 0 {
 		a.status.SetText("No receive command configured — reloading local files")
 		a.reload()
+		if after != nil {
+			after(true)
+		}
 		return
 	}
 	a.syncing = true
@@ -595,10 +606,16 @@ func (a *App) sync() {
 			if len(failures) > 0 {
 				dialog.ShowInformation("Sync failed", strings.Join(failures, "\n")+"\n\n"+a.log, a.Window)
 			}
+			if after != nil {
+				after(len(failures) == 0)
+			}
 		})
 	}()
 }
 func (a *App) requestClose() {
+	if a.closing {
+		return
+	}
 	for c := range a.composers {
 		if c.sending {
 			dialog.ShowInformation("Sending in progress", "Wait for delivery to finish before closing MailSalonGUI.", a.Window)
@@ -621,6 +638,31 @@ func (a *App) requestClose() {
 	a.close()
 }
 func (a *App) close() {
+	if a.closing {
+		return
+	}
+	a.closing = true
+	waiting := dialog.NewCustomWithoutButtons("Syncing before exit", widget.NewLabel("Waiting for pending work and syncing all accounts…"), a.Window)
+	waiting.Show()
+	var finish func()
+	finish = func() {
+		if a.syncing || a.changing || a.folderBusy {
+			time.AfterFunc(50*time.Millisecond, func() { a.post(finish) })
+			return
+		}
+		a.syncThen(func(ok bool) {
+			waiting.Hide()
+			if !ok {
+				a.closing = false
+				return
+			}
+			a.finishClose()
+		})
+	}
+	finish()
+}
+
+func (a *App) finishClose() {
 	a.cancel()
 	for c := range a.composers {
 		c.window.SetCloseIntercept(nil)

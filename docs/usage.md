@@ -240,3 +240,9 @@ to with Accept/Decline. Replies from other attendees are previewed only.
 | Widgets | Tab / Shift+Tab | Move input focus |
 
 Fyne manages caret focus, so only the active editable field shows its cursor.
+
+Both clients sync all configured accounts before exiting, running shared receive
+commands once. They wait for an active sync before starting the final pass.
+This also applies with `-no-startup-sync`. Accounts without a receive command
+are skipped. If the exit sync fails, MailSalon reports the error and exits;
+MailSalonGUI stays open so you can retry closing after resolving the error.

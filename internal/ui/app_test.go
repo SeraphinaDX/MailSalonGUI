@@ -263,3 +263,25 @@ func TestMailDatesInReaderTimezone(t *testing.T) {
 		t.Fatal("forward quote did not localize date")
 	}
 }
+
+func TestExitSyncWaitsAndRunsAllUniqueCommands(t *testing.T) {
+	log := filepath.Join(t.TempDir(), "sync.log")
+	cmd := "printf 'sync\n' >> '" + log + "'"
+	a := &App{cfg: config.Config{Accounts: []config.Account{
+		{ReceiveCommand: cmd}, {ReceiveCommand: cmd},
+		{ReceiveCommand: "exit 1"},
+		{ReceiveCommand: "printf 'last\n' >> '" + log + "'"},
+	}}, autoSyncing: true}
+	done := make(chan periodicSyncResult)
+	go func() {
+		os.WriteFile(log, []byte("active\n"), 0600)
+		done <- periodicSyncResult{}
+	}()
+	if err := a.syncBeforeExit(done); err == nil {
+		t.Fatal("expected exit sync failure")
+	}
+	data, err := os.ReadFile(log)
+	if err != nil || string(data) != "active\nsync\nlast\n" {
+		t.Fatalf("exit sync order or deduplication: %q, %v", data, err)
+	}
+}

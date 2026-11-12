@@ -200,7 +200,7 @@ func New(cfg config.Config) (*App, error) {
 	return a, nil
 }
 
-func (a *App) Run() error {
+func (a *App) Run() (err error) {
 	a.render()
 	if a.cfg.StartupSync && strings.TrimSpace(a.currentAccount().ReceiveCommand) != "" {
 		a.runSync()
@@ -209,6 +209,11 @@ func (a *App) Run() error {
 
 	events := ui.PollEvents()
 	autoSyncDone := make(chan periodicSyncResult, 1)
+	defer func() {
+		a.status = "Syncing all accounts before exiting..."
+		a.render()
+		err = a.syncBeforeExit(autoSyncDone)
+	}()
 
 	var ticker *time.Ticker
 	var syncTick <-chan time.Time
@@ -299,6 +304,22 @@ func (a *App) Run() error {
 			a.render()
 		}
 	}
+}
+
+// syncBeforeExit waits for an active receive before running a final pass so
+// local changes made during that receive are also uploaded.
+func (a *App) syncBeforeExit(done <-chan periodicSyncResult) error {
+	if a.autoSyncing {
+		<-done
+		a.autoSyncing = false
+	}
+	final := make(chan periodicSyncResult, 1)
+	a.runPeriodicSync(final)
+	result := <-final
+	if len(result.failures) > 0 {
+		return fmt.Errorf("exit sync failed: %s", strings.Join(result.failures, "; "))
+	}
+	return nil
 }
 
 type periodicSyncResult struct {
